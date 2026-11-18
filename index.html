@@ -50,17 +50,52 @@
   .info{font-size:13px;color:var(--muted);margin-top:8px}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:8px;opacity:0;transition:.25s;pointer-events:none}
   .toast.on{opacity:1}
+  [hidden]{display:none!important}
+  #telaLogin{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+  #telaLogin .card{width:100%;max-width:380px}
+  #telaLogin form{display:flex;flex-direction:column;gap:12px}
+  #telaLogin .erro{color:var(--danger);font-size:13px;min-height:18px}
+  #telaLogin a{color:var(--pri);font-size:13px;cursor:pointer}
+  .usuario{font-size:13px;opacity:.9;margin-right:8px}
+  .carregando{position:fixed;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,var(--pri),transparent);background-size:200% 100%;animation:car 1s linear infinite;z-index:60;display:none}
+  .carregando.on{display:block}
+  @keyframes car{from{background-position:100% 0}to{background-position:-100% 0}}
   @media print{header .acoes,nav,.card form,.linha-botoes,button{display:none!important}section{display:block!important}}
 </style>
 </head>
 <body>
+<div class="carregando" id="carregando"></div>
+
+<div id="telaLogin">
+  <div class="card">
+    <h2 id="loginTitulo">⛽ Controle de Combustível</h2>
+    <form id="fLogin">
+      <label>E-mail <input type="email" name="email" required autocomplete="username"></label>
+      <label id="campoSenha">Senha <input type="password" name="senha" autocomplete="current-password"></label>
+      <div class="erro" id="loginErro"></div>
+      <button class="pri" type="submit" id="loginBotao">Entrar</button>
+      <a id="linkEsqueci">Esqueci minha senha</a>
+    </form>
+    <form id="fNovaSenha" hidden>
+      <p class="info" style="margin:0">Crie sua senha de acesso (mínimo 6 caracteres).</p>
+      <label>Nova senha <input type="password" name="senha" minlength="6" required autocomplete="new-password"></label>
+      <label>Repita a senha <input type="password" name="senha2" minlength="6" required autocomplete="new-password"></label>
+      <div class="erro" id="novaSenhaErro"></div>
+      <button class="pri" type="submit">Salvar senha e entrar</button>
+    </form>
+  </div>
+</div>
 
 <header>
   <h1>⛽ Controle de Combustível – Roçadeiras e Tratores</h1>
   <div class="acoes">
+    <span class="usuario" id="usuarioEmail"></span>
+    <button onclick="recarregar()">Atualizar</button>
+    <button id="btnMigrar" hidden onclick="migrarLocal()">Enviar dados deste navegador</button>
     <button onclick="exportarBackup()">Salvar backup</button>
     <button onclick="document.getElementById('arqBackup').click()">Restaurar backup</button>
     <input type="file" id="arqBackup" accept=".json" hidden onchange="importarBackup(this)">
+    <button onclick="sair()">Sair</button>
   </div>
 </header>
 
@@ -247,20 +282,48 @@
 </main>
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+/* ===================== SUPABASE ===================== */
+const SUPABASE_URL = 'https://xmxcdrtrdvxjkzfxbxsl.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_n_SJIeAlMHqsSbU01hA-Rg_djL-Utos';
+// Links de convite ou de "esqueci a senha" chegam com type=invite/recovery: nesses casos pedimos para criar a senha.
+let PRECISA_SENHA = /type=(invite|recovery)/.test(location.hash);
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const TABELA = 'registros';
+
 /* ===================== DADOS ===================== */
 const CHAVE = 'controleCombustivel_v1';
+const COLECOES = ['colaboradores','maquinas','abastecimentos','nylon','ordens'];
 const vazio = () => ({colaboradores:[],maquinas:[],abastecimentos:[],nylon:[],ordens:[]});
-let db;
-function carregar(){
-  try{ db = Object.assign(vazio(), JSON.parse(localStorage.getItem(CHAVE)) || {}); }
-  catch(e){ db = vazio(); }
+let db = vazio();
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2,9));
+function carregando(on){ document.getElementById('carregando').classList.toggle('on', on); }
+
+async function carregar(){
+  carregando(true);
+  const novo = vazio(); const passo = 1000; let de = 0;
+  try{
+    while(true){
+      const { data, error } = await sb.from(TABELA).select('id,colecao,dados').order('criado_em').range(de, de+passo-1);
+      if(error) throw error;
+      data.forEach(r=>{ if(novo[r.colecao]) novo[r.colecao].push(Object.assign({}, r.dados, {id:r.id})); });
+      if(data.length < passo) break; de += passo;
+    }
+    db = novo;
+  }catch(e){ console.error(e); toast('Erro ao carregar os dados: '+(e.message||e)); }
+  carregando(false);
 }
-function salvar(){
-  try{ localStorage.setItem(CHAVE, JSON.stringify(db)); }
-  catch(e){ toast('Não foi possível salvar no navegador. Faça um backup.'); }
+async function salvarRegistro(colecao, obj){
+  const { id, ...dados } = obj;
+  const { error } = await sb.from(TABELA).upsert({ id, colecao, dados, atualizado_em: new Date().toISOString() });
+  if(error) throw error;
 }
-const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+async function excluirRegistro(id){
+  const { error } = await sb.from(TABELA).delete().eq('id', id);
+  if(error) throw error;
+}
+async function recarregar(){ await carregar(); render(); toast('Dados atualizados.'); }
 
 /* ===================== UTIL ===================== */
 const $ = s => document.querySelector(s);
@@ -311,10 +374,15 @@ function limparForm(id){
   const titulos={fAbast:['tituloAbast','Novo abastecimento'],fNylon:['tituloNylon','Novo lançamento de nylon e faca'],fOS:['tituloOS','Nova ordem de serviço'],fColab:['tituloColab','Cadastrar colaborador'],fMaq:['tituloMaq','Cadastrar equipamento']};
   const t=titulos[id]; document.getElementById(t[0]).textContent=t[1];
 }
-function gravar(colecao, obj, formId){
-  if(obj.id){ const i=db[colecao].findIndex(x=>x.id===obj.id); if(i>-1) db[colecao][i]=obj; }
-  else { obj.id=uid(); db[colecao].push(obj); }
-  salvar(); limparForm(formId); render(); toast('Salvo!');
+async function gravar(colecao, obj, formId){
+  const novo = !obj.id; if(novo) obj.id = uid();
+  carregando(true);
+  try{ await salvarRegistro(colecao, obj); }
+  catch(e){ carregando(false); if(novo) obj.id=''; alert('Não foi possível salvar: '+(e.message||e)); return; }
+  carregando(false);
+  if(novo) db[colecao].push(obj);
+  else { const i=db[colecao].findIndex(x=>x.id===obj.id); if(i>-1) db[colecao][i]=obj; }
+  limparForm(formId); render(); toast('Salvo!');
 }
 function editar(colecao, id, formId, tituloId, titulo){
   const o = db[colecao].find(x=>x.id===id); if(!o) return;
@@ -324,13 +392,17 @@ function editar(colecao, id, formId, tituloId, titulo){
   document.getElementById(tituloId).textContent = titulo;
   f.scrollIntoView({behavior:'smooth'});
 }
-function excluir(colecao, id){
+async function excluir(colecao, id){
   if(colecao==='maquinas' && (db.abastecimentos.some(a=>a.maquinaId===id)||db.nylon.some(a=>a.maquinaId===id))){
     alert('Este equipamento tem lançamentos. Marque-o como Inativo em vez de excluir.'); return; }
   if(colecao==='colaboradores' && (db.abastecimentos.some(a=>a.colabId===id)||db.nylon.some(a=>a.colabId===id)||db.ordens.some(o=>(o.colabs||[]).includes(id)))){
     alert('Este colaborador tem lançamentos. Marque-o como Inativo em vez de excluir.'); return; }
   if(!confirm('Excluir este registro?')) return;
-  db[colecao] = db[colecao].filter(x=>x.id!==id); salvar(); render(); toast('Excluído.');
+  carregando(true);
+  try{ await excluirRegistro(id); }
+  catch(e){ carregando(false); alert('Não foi possível excluir: '+(e.message||e)); return; }
+  carregando(false);
+  db[colecao] = db[colecao].filter(x=>x.id!==id); render(); toast('Excluído.');
 }
 
 $('#fAbast').addEventListener('submit', e=>{ e.preventDefault(); gravar('abastecimentos', lerForm(e.target), 'fAbast'); });
@@ -447,19 +519,96 @@ function exportarCSV(col){
   baixar(`${col}_${hoje()}.csv`, '\ufeff'+csv, 'text/csv;charset=utf-8');
 }
 function exportarBackup(){ baixar(`backup_combustivel_${hoje()}.json`, JSON.stringify(db,null,2), 'application/json'); }
+// Envia um conjunto de dados (backup ou dados antigos do navegador) para o banco.
+// Registros com o mesmo id são atualizados; nada é apagado.
+async function enviarParaBanco(dados){
+  const linhas = [];
+  COLECOES.forEach(c=>(dados[c]||[]).forEach(o=>{ const { id, ...resto } = o; if(id) linhas.push({ id, colecao:c, dados:resto, atualizado_em:new Date().toISOString() }); }));
+  carregando(true);
+  try{
+    for(let i=0;i<linhas.length;i+=500){
+      const { error } = await sb.from(TABELA).upsert(linhas.slice(i,i+500));
+      if(error) throw error;
+    }
+  }finally{ carregando(false); }
+  return linhas.length;
+}
 function importarBackup(inp){
   const f=inp.files[0]; if(!f) return;
   const r=new FileReader();
-  r.onload=()=>{ try{ const d=JSON.parse(r.result); if(!confirm('Substituir todos os dados atuais pelo backup?')) return;
-    db=Object.assign(vazio(),d); salvar(); render(); toast('Backup restaurado.'); }catch(e){ alert('Arquivo de backup inválido.'); } inp.value=''; };
+  r.onload=async ()=>{
+    inp.value='';
+    let d; try{ d=JSON.parse(r.result); }catch(e){ alert('Arquivo de backup inválido.'); return; }
+    if(!confirm('Enviar os registros deste backup para o banco? Registros iguais serão atualizados; nada será apagado.')) return;
+    try{ const n = await enviarParaBanco(d); await carregar(); render(); toast(n+' registros restaurados.'); }
+    catch(e){ alert('Erro ao restaurar: '+(e.message||e)); }
+  };
   r.readAsText(f);
 }
+function dadosLocais(){
+  try{ const d = JSON.parse(localStorage.getItem(CHAVE)); return d && COLECOES.some(c=>(d[c]||[]).length) ? d : null; }catch(e){ return null; }
+}
+async function migrarLocal(){
+  const d = dadosLocais(); if(!d) return;
+  if(!confirm('Este navegador tem lançamentos da versão antiga (sem banco). Enviar todos para o banco de dados?')) return;
+  try{
+    const n = await enviarParaBanco(d);
+    localStorage.setItem(CHAVE+'_enviado', localStorage.getItem(CHAVE)); localStorage.removeItem(CHAVE);
+    $('#btnMigrar').hidden = true; await carregar(); render(); toast(n+' registros enviados ao banco.');
+  }catch(e){ alert('Erro ao enviar: '+(e.message||e)); }
+}
+
+/* ===================== LOGIN ===================== */
+const telaLogin = $('#telaLogin');
+let iniciado = false;
+function mostrarLogin(modo){
+  telaLogin.hidden = false;
+  $('#fLogin').hidden = modo==='senha';
+  $('#fNovaSenha').hidden = modo!=='senha';
+  $('#loginTitulo').textContent = modo==='senha' ? 'Criar senha de acesso' : '⛽ Controle de Combustível';
+}
+async function entrarNoSistema(session){
+  telaLogin.hidden = true;
+  $('#usuarioEmail').textContent = session.user.email;
+  $('#btnMigrar').hidden = !dadosLocais();
+  if(iniciado) return; iniciado = true;
+  await carregar(); render();
+}
+$('#fLogin').addEventListener('submit', async e=>{
+  e.preventDefault(); const f=e.target; $('#loginErro').textContent='';
+  if(!f.senha.value){ $('#loginErro').textContent='Digite a senha.'; return; }
+  $('#loginBotao').disabled = true;
+  const { error } = await sb.auth.signInWithPassword({ email:f.email.value.trim(), password:f.senha.value });
+  $('#loginBotao').disabled = false;
+  if(error) $('#loginErro').textContent = error.message.includes('Invalid') ? 'E-mail ou senha incorretos.' : error.message;
+});
+$('#linkEsqueci').addEventListener('click', async ()=>{
+  const email = $('#fLogin').email.value.trim();
+  if(!email){ $('#loginErro').textContent='Digite seu e-mail acima e clique de novo em "Esqueci minha senha".'; return; }
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  $('#loginErro').textContent = error ? error.message : 'Enviamos um link para criar uma nova senha no seu e-mail.';
+});
+$('#fNovaSenha').addEventListener('submit', async e=>{
+  e.preventDefault(); const f=e.target;
+  if(f.senha.value!==f.senha2.value){ $('#novaSenhaErro').textContent='As senhas não são iguais.'; return; }
+  const { data, error } = await sb.auth.updateUser({ password:f.senha.value });
+  if(error){ $('#novaSenhaErro').textContent=error.message; return; }
+  history.replaceState(null,'',location.pathname); f.reset();
+  entrarNoSistema((await sb.auth.getSession()).data.session);
+});
+async function sair(){ await sb.auth.signOut(); location.reload(); }
 
 /* ===================== INÍCIO ===================== */
-carregar();
 $('#mesPainel').value = hoje().slice(0,7);
 ['fAbast','fNylon'].forEach(id=>document.getElementById(id).data.value=hoje());
 render();
+sb.auth.onAuthStateChange((evento, session)=>{
+  setTimeout(()=>{
+    if(evento==='PASSWORD_RECOVERY' || (session && PRECISA_SENHA)){ PRECISA_SENHA = false; mostrarLogin('senha'); return; }
+    if(!telaLogin.hidden && !$('#fNovaSenha').hidden) return; // aguardando a pessoa criar a senha
+    if(session) entrarNoSistema(session); else mostrarLogin('login');
+  },0);
+});
 </script>
 </body>
 </html>
