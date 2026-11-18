@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de Combustível – Roçadeiras e Tratores</title>
+<style>
+  :root{
+    --bg:#f4f6f5; --card:#fff; --ink:#1d2a24; --muted:#6b7a72; --line:#dfe5e1;
+    --pri:#1f6f4a; --pri2:#e6f2ec; --warn:#b4541b; --danger:#b42318;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
+  header{background:var(--pri);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .acoes button{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35)}
+  nav{display:flex;gap:4px;padding:0 16px;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto}
+  nav button{background:none;border:none;border-bottom:3px solid transparent;border-radius:0;padding:14px 14px;color:var(--muted);font-weight:500;white-space:nowrap}
+  nav button.ativo{color:var(--pri);border-bottom-color:var(--pri)}
+  main{max-width:1200px;margin:0 auto;padding:20px 16px 60px}
+  section{display:none} section.ativo{display:block}
+  h2{font-size:17px;margin:0 0 14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:18px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+  label{display:flex;flex-direction:column;font-size:13px;color:var(--muted);gap:4px}
+  input,select,textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--pri2);border-color:var(--pri)}
+  button{font:inherit;cursor:pointer;padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:#fff;color:var(--ink)}
+  button.pri{background:var(--pri);color:#fff;border-color:var(--pri)}
+  button.peq{padding:4px 9px;font-size:13px}
+  button.del{color:var(--danger)}
+  .linha-botoes{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+  .tabela-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+  th{color:var(--muted);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.03em;background:#fafbfa}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .vazio{color:var(--muted);text-align:center;padding:24px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:18px}
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .kpi .v{font-size:24px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums}
+  .kpi .r{font-size:12px;color:var(--muted)}
+  .filtros{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px}
+  .barra{height:8px;background:var(--pri2);border-radius:4px;overflow:hidden;min-width:80px}
+  .barra i{display:block;height:100%;background:var(--pri)}
+  .tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;background:var(--pri2);color:var(--pri)}
+  .tag.t{background:#fdf0e7;color:var(--warn)}
+  .checks{display:flex;flex-wrap:wrap;gap:6px 14px;padding:8px;border:1px solid var(--line);border-radius:6px;max-height:140px;overflow:auto}
+  .checks label{flex-direction:row;align-items:center;gap:6px;color:var(--ink);font-size:14px}
+  .info{font-size:13px;color:var(--muted);margin-top:8px}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:8px;opacity:0;transition:.25s;pointer-events:none}
+  .toast.on{opacity:1}
+  @media print{header .acoes,nav,.card form,.linha-botoes,button{display:none!important}section{display:block!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⛽ Controle de Combustível – Roçadeiras e Tratores</h1>
+  <div class="acoes">
+    <button onclick="exportarBackup()">Salvar backup</button>
+    <button onclick="document.getElementById('arqBackup').click()">Restaurar backup</button>
+    <input type="file" id="arqBackup" accept=".json" hidden onchange="importarBackup(this)">
+  </div>
+</header>
+
+<nav id="menu">
+  <button data-aba="painel" class="ativo">Painel</button>
+  <button data-aba="abastecimento">Abastecimento</button>
+  <button data-aba="nylon">Nylon e Faca</button>
+  <button data-aba="os">Ordens de Serviço</button>
+  <button data-aba="colaboradores">Colaboradores</button>
+  <button data-aba="maquinas">Maquinário</button>
+</nav>
+
+<main>
+
+<!-- ============ PAINEL ============ -->
+<section id="painel" class="ativo">
+  <div class="filtros">
+    <label>Mês de referência <input type="month" id="mesPainel"></label>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
+    <div class="card"><h2>Combustível por equipamento</h2><div class="tabela-wrap"><table id="tPainelMaq"></table></div></div>
+    <div class="card"><h2>Combustível por colaborador</h2><div class="tabela-wrap"><table id="tPainelCol"></table></div></div>
+  </div>
+</section>
+
+<!-- ============ ABASTECIMENTO ============ -->
+<section id="abastecimento">
+  <div class="card">
+    <h2 id="tituloAbast">Novo abastecimento</h2>
+    <form id="fAbast">
+      <input type="hidden" name="id">
+      <div class="grid">
+        <label>Data <input type="date" name="data" required></label>
+        <label>Equipamento <select name="maquinaId" required></select></label>
+        <label>Operador / Motorista <select name="colabId" required></select></label>
+        <label>Combustível
+          <select name="combustivel">
+            <option>Gasolina</option><option>Mistura 2T</option><option>Diesel S10</option><option>Diesel S500</option><option>Etanol</option>
+          </select>
+        </label>
+        <label>Litros <input type="number" name="litros" step="0.01" min="0" required></label>
+        <label>Valor por litro (R$) <input type="number" name="valorLitro" step="0.01" min="0"></label>
+        <label>Horímetro (opcional) <input type="number" name="horimetro" step="0.1" min="0"></label>
+        <label>Local / Frente <input type="text" name="local"></label>
+      </div>
+      <label style="margin-top:12px">Observação <textarea name="obs" rows="2"></textarea></label>
+      <div class="linha-botoes">
+        <button class="pri" type="submit">Salvar</button>
+        <button type="button" onclick="limparForm('fAbast')">Limpar</button>
+      </div>
+    </form>
+  </div>
+  <div class="card">
+    <div class="filtros">
+      <label>De <input type="date" id="abDe"></label>
+      <label>Até <input type="date" id="abAte"></label>
+      <label>Equipamento <select id="abMaq"></select></label>
+      <button onclick="exportarCSV('abastecimentos')">Exportar CSV</button>
+    </div>
+    <div class="tabela-wrap"><table id="tAbast"></table></div>
+  </div>
+</section>
+
+<!-- ============ NYLON E FACA ============ -->
+<section id="nylon">
+  <div class="card">
+    <h2 id="tituloNylon">Novo lançamento de nylon e faca</h2>
+    <form id="fNylon">
+      <input type="hidden" name="id">
+      <div class="grid">
+        <label>Data <input type="date" name="data" required></label>
+        <label>Equipamento <select name="maquinaId" required></select></label>
+        <label>Operador <select name="colabId" required></select></label>
+        <label>Nylon (quantidade) <input type="number" name="nylon" step="0.01" min="0" value="0"></label>
+        <label>Unidade do nylon
+          <select name="unNylon"><option>metros</option><option>rolos</option><option>kg</option><option>unidades</option></select>
+        </label>
+        <label>Faca (quantidade) <input type="number" name="faca" step="1" min="0" value="0"></label>
+        <label>Local / Frente <input type="text" name="local"></label>
+      </div>
+      <label style="margin-top:12px">Observação <textarea name="obs" rows="2"></textarea></label>
+      <div class="linha-botoes">
+        <button class="pri" type="submit">Salvar</button>
+        <button type="button" onclick="limparForm('fNylon')">Limpar</button>
+      </div>
+    </form>
+  </div>
+  <div class="card">
+    <div class="filtros">
+      <label>De <input type="date" id="nyDe"></label>
+      <label>Até <input type="date" id="nyAte"></label>
+      <button onclick="exportarCSV('nylon')">Exportar CSV</button>
+    </div>
+    <div class="tabela-wrap"><table id="tNylon"></table></div>
+  </div>
+</section>
+
+<!-- ============ ORDENS DE SERVIÇO ============ -->
+<section id="os">
+  <div class="card">
+    <h2 id="tituloOS">Nova ordem de serviço</h2>
+    <form id="fOS">
+      <input type="hidden" name="id">
+      <div class="grid">
+        <label>Nº da OS <input type="text" name="numero" required></label>
+        <label>Local / Área <input type="text" name="local" required></label>
+        <label>Tipo de serviço
+          <select name="tipo"><option>Roçada costal</option><option>Roçada com trator</option><option>Capina</option><option>Limpeza</option><option>Outro</option></select>
+        </label>
+        <label>Início <input type="datetime-local" name="inicio" required></label>
+        <label>Fim <input type="datetime-local" name="fim" required></label>
+        <label>Qtd. de colaboradores <input type="number" name="qtdColab" min="1" step="1" required></label>
+        <label>Área (m², opcional) <input type="number" name="area" min="0" step="0.01"></label>
+      </div>
+      <label style="margin-top:12px">Colaboradores que realizaram (marque para preencher a quantidade automaticamente)
+        <div class="checks" id="checksOS"></div>
+      </label>
+      <div class="info" id="calcOS">Horas: – | Homem-hora: –</div>
+      <label style="margin-top:12px">Descrição <textarea name="obs" rows="2"></textarea></label>
+      <div class="linha-botoes">
+        <button class="pri" type="submit">Salvar</button>
+        <button type="button" onclick="limparForm('fOS')">Limpar</button>
+      </div>
+    </form>
+  </div>
+  <div class="card">
+    <div class="filtros">
+      <label>De <input type="date" id="osDe"></label>
+      <label>Até <input type="date" id="osAte"></label>
+      <button onclick="exportarCSV('ordens')">Exportar CSV</button>
+    </div>
+    <div class="tabela-wrap"><table id="tOS"></table></div>
+  </div>
+</section>
+
+<!-- ============ COLABORADORES ============ -->
+<section id="colaboradores">
+  <div class="card">
+    <h2 id="tituloColab">Cadastrar colaborador</h2>
+    <form id="fColab">
+      <input type="hidden" name="id">
+      <div class="grid">
+        <label>Nome <input type="text" name="nome" required></label>
+        <label>Matrícula <input type="text" name="matricula"></label>
+        <label>Função
+          <select name="funcao"><option>Operador de Roçadeira</option><option>Motorista de Trator</option><option>Ajudante</option><option>Encarregado</option></select>
+        </label>
+        <label>Situação <select name="ativo"><option value="1">Ativo</option><option value="0">Inativo</option></select></label>
+      </div>
+      <div class="linha-botoes">
+        <button class="pri" type="submit">Salvar</button>
+        <button type="button" onclick="limparForm('fColab')">Limpar</button>
+      </div>
+    </form>
+  </div>
+  <div class="card"><div class="tabela-wrap"><table id="tColab"></table></div></div>
+</section>
+
+<!-- ============ MAQUINÁRIO ============ -->
+<section id="maquinas">
+  <div class="card">
+    <h2 id="tituloMaq">Cadastrar equipamento</h2>
+    <form id="fMaq">
+      <input type="hidden" name="id">
+      <div class="grid">
+        <label>Código / Patrimônio <input type="text" name="codigo" required></label>
+        <label>Tipo <select name="tipo"><option>Roçadeira Costal</option><option>Trator</option><option>Outro</option></select></label>
+        <label>Marca / Modelo <input type="text" name="modelo"></label>
+        <label>Combustível padrão
+          <select name="combustivel"><option>Gasolina</option><option>Mistura 2T</option><option>Diesel S10</option><option>Diesel S500</option><option>Etanol</option></select>
+        </label>
+        <label>Situação <select name="ativo"><option value="1">Ativo</option><option value="0">Inativo</option></select></label>
+      </div>
+      <div class="linha-botoes">
+        <button class="pri" type="submit">Salvar</button>
+        <button type="button" onclick="limparForm('fMaq')">Limpar</button>
+      </div>
+    </form>
+  </div>
+  <div class="card"><div class="tabela-wrap"><table id="tMaq"></table></div></div>
+</section>
+
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===================== DADOS ===================== */
+const CHAVE = 'controleCombustivel_v1';
+const vazio = () => ({colaboradores:[],maquinas:[],abastecimentos:[],nylon:[],ordens:[]});
+let db;
+function carregar(){
+  try{ db = Object.assign(vazio(), JSON.parse(localStorage.getItem(CHAVE)) || {}); }
+  catch(e){ db = vazio(); }
+}
+function salvar(){
+  try{ localStorage.setItem(CHAVE, JSON.stringify(db)); }
+  catch(e){ toast('Não foi possível salvar no navegador. Faça um backup.'); }
+}
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+
+/* ===================== UTIL ===================== */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v,d=2) => Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const brl = v => Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const dataBR = d => d ? d.split('-').reverse().join('/') : '';
+const dtBR = d => d ? new Date(d).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}) : '';
+const hoje = () => new Date().toISOString().slice(0,10);
+const nomeColab = id => db.colaboradores.find(c=>c.id===id)?.nome || '—';
+const maq = id => db.maquinas.find(m=>m.id===id);
+const nomeMaq = id => { const m = maq(id); return m ? `${m.codigo}${m.modelo?' – '+m.modelo:''}` : '—'; };
+function horasEntre(a,b){ if(!a||!b) return 0; const h=(new Date(b)-new Date(a))/36e5; return h>0?h:0; }
+function hhmm(h){ const t=Math.round(h*60); return `${Math.floor(t/60)}h${String(t%60).padStart(2,'0')}`; }
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),2200); }
+function noPeriodo(data,de,ate){ const d=(data||'').slice(0,10); return (!de||d>=de)&&(!ate||d<=ate); }
+
+/* ===================== NAVEGAÇÃO ===================== */
+$('#menu').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  document.querySelectorAll('#menu button').forEach(x=>x.classList.toggle('ativo',x===b));
+  document.querySelectorAll('section').forEach(s=>s.classList.toggle('ativo',s.id===b.dataset.aba));
+  render();
+});
+
+/* ===================== SELECTS ===================== */
+function preencherSelects(){
+  const maqsAtivas = db.maquinas.filter(m=>m.ativo!=='0');
+  const colsAtivos = db.colaboradores.filter(c=>c.ativo!=='0');
+  const optM = '<option value="">Selecione…</option>' + maqsAtivas.map(m=>`<option value="${m.id}">${esc(m.codigo)} – ${esc(m.tipo)}${m.modelo?' ('+esc(m.modelo)+')':''}</option>`).join('');
+  const optC = '<option value="">Selecione…</option>' + colsAtivos.map(c=>`<option value="${c.id}">${esc(c.nome)} – ${esc(c.funcao)}</option>`).join('');
+  document.querySelectorAll('select[name=maquinaId]').forEach(s=>{const v=s.value; s.innerHTML=optM; s.value=v;});
+  document.querySelectorAll('select[name=colabId]').forEach(s=>{const v=s.value; s.innerHTML=optC; s.value=v;});
+  const f=$('#abMaq'), fv=f.value;
+  f.innerHTML='<option value="">Todos</option>'+db.maquinas.map(m=>`<option value="${m.id}">${esc(m.codigo)}</option>`).join(''); f.value=fv;
+  const marcados = [...document.querySelectorAll('#checksOS input:checked')].map(i=>i.value);
+  $('#checksOS').innerHTML = colsAtivos.length
+    ? colsAtivos.map(c=>`<label><input type="checkbox" value="${c.id}" ${marcados.includes(c.id)?'checked':''}> ${esc(c.nome)}</label>`).join('')
+    : '<span class="info">Cadastre colaboradores na aba Colaboradores.</span>';
+}
+
+/* ===================== FORMULÁRIOS ===================== */
+function lerForm(f){ return Object.fromEntries(new FormData(f).entries()); }
+function limparForm(id){
+  const f = document.getElementById(id); f.reset(); f.id.value='';
+  if(f.data) f.data.value = hoje();
+  if(id==='fOS'){ document.querySelectorAll('#checksOS input').forEach(i=>i.checked=false); atualizarCalcOS(); }
+  const titulos={fAbast:['tituloAbast','Novo abastecimento'],fNylon:['tituloNylon','Novo lançamento de nylon e faca'],fOS:['tituloOS','Nova ordem de serviço'],fColab:['tituloColab','Cadastrar colaborador'],fMaq:['tituloMaq','Cadastrar equipamento']};
+  const t=titulos[id]; document.getElementById(t[0]).textContent=t[1];
+}
+function gravar(colecao, obj, formId){
+  if(obj.id){ const i=db[colecao].findIndex(x=>x.id===obj.id); if(i>-1) db[colecao][i]=obj; }
+  else { obj.id=uid(); db[colecao].push(obj); }
+  salvar(); limparForm(formId); render(); toast('Salvo!');
+}
+function editar(colecao, id, formId, tituloId, titulo){
+  const o = db[colecao].find(x=>x.id===id); if(!o) return;
+  const f = document.getElementById(formId);
+  Object.entries(o).forEach(([k,v])=>{ if(f.elements[k]) f.elements[k].value=v; });
+  if(formId==='fOS'){ document.querySelectorAll('#checksOS input').forEach(i=>i.checked=(o.colabs||[]).includes(i.value)); atualizarCalcOS(); }
+  document.getElementById(tituloId).textContent = titulo;
+  f.scrollIntoView({behavior:'smooth'});
+}
+function excluir(colecao, id){
+  if(colecao==='maquinas' && (db.abastecimentos.some(a=>a.maquinaId===id)||db.nylon.some(a=>a.maquinaId===id))){
+    alert('Este equipamento tem lançamentos. Marque-o como Inativo em vez de excluir.'); return; }
+  if(colecao==='colaboradores' && (db.abastecimentos.some(a=>a.colabId===id)||db.nylon.some(a=>a.colabId===id)||db.ordens.some(o=>(o.colabs||[]).includes(id)))){
+    alert('Este colaborador tem lançamentos. Marque-o como Inativo em vez de excluir.'); return; }
+  if(!confirm('Excluir este registro?')) return;
+  db[colecao] = db[colecao].filter(x=>x.id!==id); salvar(); render(); toast('Excluído.');
+}
+
+$('#fAbast').addEventListener('submit', e=>{ e.preventDefault(); gravar('abastecimentos', lerForm(e.target), 'fAbast'); });
+$('#fNylon').addEventListener('submit', e=>{ e.preventDefault(); gravar('nylon', lerForm(e.target), 'fNylon'); });
+$('#fColab').addEventListener('submit', e=>{ e.preventDefault(); gravar('colaboradores', lerForm(e.target), 'fColab'); });
+$('#fMaq').addEventListener('submit', e=>{ e.preventDefault(); gravar('maquinas', lerForm(e.target), 'fMaq'); });
+$('#fOS').addEventListener('submit', e=>{
+  e.preventDefault();
+  const o = lerForm(e.target);
+  if(horasEntre(o.inicio,o.fim)<=0){ alert('A data/hora de fim deve ser depois do início.'); return; }
+  o.colabs = [...document.querySelectorAll('#checksOS input:checked')].map(i=>i.value);
+  gravar('ordens', o, 'fOS');
+});
+// combustível padrão ao escolher o equipamento
+$('#fAbast').maquinaId.addEventListener('change', e=>{ const m=maq(e.target.value); if(m) $('#fAbast').combustivel.value=m.combustivel; });
+// cálculo da OS
+function atualizarCalcOS(){
+  const f=$('#fOS'); const h=horasEntre(f.inicio.value,f.fim.value); const q=Number(f.qtdColab.value)||0;
+  $('#calcOS').textContent = `Horas: ${h?hhmm(h):'–'} | Homem-hora: ${h&&q?num(h*q):'–'}`;
+}
+['inicio','fim','qtdColab'].forEach(n=>$('#fOS').elements[n].addEventListener('input',atualizarCalcOS));
+$('#checksOS').addEventListener('change', ()=>{
+  const n=document.querySelectorAll('#checksOS input:checked').length; if(n) $('#fOS').qtdColab.value=n; atualizarCalcOS();
+});
+
+/* ===================== TABELAS ===================== */
+function tabela(el, cab, linhas, vazioMsg){
+  el.innerHTML = `<thead><tr>${cab.map(c=>`<th class="${c.n?'num':''}">${c.t}</th>`).join('')}</tr></thead>
+  <tbody>${linhas.length?linhas.join(''):`<tr><td class="vazio" colspan="${cab.length}">${vazioMsg}</td></tr>`}</tbody>`;
+}
+const botoes = (col,id,form,tit,txt) => `<td><button class="peq" onclick="editar('${col}','${id}','${form}','${tit}','${txt}')">Editar</button> <button class="peq del" onclick="excluir('${col}','${id}')">Excluir</button></td>`;
+
+function renderAbast(){
+  const de=$('#abDe').value, ate=$('#abAte').value, mq=$('#abMaq').value;
+  const lista = db.abastecimentos.filter(a=>noPeriodo(a.data,de,ate)&&(!mq||a.maquinaId===mq)).sort((a,b)=>b.data.localeCompare(a.data));
+  let tl=0, tv=0;
+  const linhas = lista.map(a=>{ const v=(+a.litros||0)*(+a.valorLitro||0); tl+=+a.litros||0; tv+=v;
+    return `<tr><td>${dataBR(a.data)}</td><td>${esc(nomeMaq(a.maquinaId))}</td><td>${esc(nomeColab(a.colabId))}</td><td>${esc(a.combustivel)}</td><td class="num">${num(a.litros)}</td><td class="num">${a.valorLitro?brl(a.valorLitro):'—'}</td><td class="num">${v?brl(v):'—'}</td><td class="num">${a.horimetro?num(a.horimetro,1):'—'}</td><td>${esc(a.local)}</td>${botoes('abastecimentos',a.id,'fAbast','tituloAbast','Editar abastecimento')}</tr>`; });
+  if(lista.length) linhas.push(`<tr style="font-weight:600"><td colspan="4">Total (${lista.length} lançamentos)</td><td class="num">${num(tl)}</td><td></td><td class="num">${brl(tv)}</td><td colspan="3"></td></tr>`);
+  tabela($('#tAbast'),[{t:'Data'},{t:'Equipamento'},{t:'Operador'},{t:'Combustível'},{t:'Litros',n:1},{t:'R$/L',n:1},{t:'Total R$',n:1},{t:'Horímetro',n:1},{t:'Local'},{t:''}],linhas,'Nenhum abastecimento no período.');
+}
+function renderNylon(){
+  const de=$('#nyDe').value, ate=$('#nyAte').value;
+  const lista = db.nylon.filter(a=>noPeriodo(a.data,de,ate)).sort((a,b)=>b.data.localeCompare(a.data));
+  let tf=0; const tn={};
+  const linhas = lista.map(a=>{ tf+=+a.faca||0; tn[a.unNylon]=(tn[a.unNylon]||0)+(+a.nylon||0);
+    return `<tr><td>${dataBR(a.data)}</td><td>${esc(nomeMaq(a.maquinaId))}</td><td>${esc(nomeColab(a.colabId))}</td><td class="num">${num(a.nylon)} ${esc(a.unNylon)}</td><td class="num">${num(a.faca,0)}</td><td>${esc(a.local)}</td>${botoes('nylon',a.id,'fNylon','tituloNylon','Editar lançamento')}</tr>`; });
+  if(lista.length) linhas.push(`<tr style="font-weight:600"><td colspan="3">Total</td><td class="num">${Object.entries(tn).map(([u,v])=>num(v)+' '+u).join(' + ')}</td><td class="num">${num(tf,0)}</td><td colspan="2"></td></tr>`);
+  tabela($('#tNylon'),[{t:'Data'},{t:'Equipamento'},{t:'Operador'},{t:'Nylon',n:1},{t:'Faca',n:1},{t:'Local'},{t:''}],linhas,'Nenhum lançamento no período.');
+}
+function renderOS(){
+  const de=$('#osDe').value, ate=$('#osAte').value;
+  const lista = db.ordens.filter(o=>noPeriodo(o.inicio,de,ate)).sort((a,b)=>b.inicio.localeCompare(a.inicio));
+  let th=0, thh=0;
+  const linhas = lista.map(o=>{ const h=horasEntre(o.inicio,o.fim), hh=h*(+o.qtdColab||0); th+=h; thh+=hh;
+    const nomes=(o.colabs||[]).map(nomeColab).join(', ');
+    return `<tr><td>${esc(o.numero)}</td><td>${esc(o.local)}</td><td>${esc(o.tipo)}</td><td>${dtBR(o.inicio)}</td><td>${dtBR(o.fim)}</td><td class="num">${hhmm(h)}</td><td class="num">${o.qtdColab}</td><td class="num">${num(hh)}</td><td title="${esc(nomes)}">${esc(nomes.length>40?nomes.slice(0,40)+'…':nomes)||'—'}</td>${botoes('ordens',o.id,'fOS','tituloOS','Editar ordem de serviço')}</tr>`; });
+  if(lista.length) linhas.push(`<tr style="font-weight:600"><td colspan="5">Total (${lista.length} OS)</td><td class="num">${hhmm(th)}</td><td></td><td class="num">${num(thh)}</td><td colspan="2"></td></tr>`);
+  tabela($('#tOS'),[{t:'Nº OS'},{t:'Local'},{t:'Tipo'},{t:'Início'},{t:'Fim'},{t:'Horas',n:1},{t:'Colab.',n:1},{t:'Homem-hora',n:1},{t:'Equipe'},{t:''}],linhas,'Nenhuma ordem de serviço no período.');
+}
+function renderColab(){
+  const linhas = [...db.colaboradores].sort((a,b)=>a.nome.localeCompare(b.nome)).map(c=>
+    `<tr><td>${esc(c.nome)}</td><td>${esc(c.matricula)}</td><td><span class="tag ${c.funcao.includes('Trator')?'t':''}">${esc(c.funcao)}</span></td><td>${c.ativo==='0'?'Inativo':'Ativo'}</td>${botoes('colaboradores',c.id,'fColab','tituloColab','Editar colaborador')}</tr>`);
+  tabela($('#tColab'),[{t:'Nome'},{t:'Matrícula'},{t:'Função'},{t:'Situação'},{t:''}],linhas,'Nenhum colaborador cadastrado.');
+}
+function renderMaq(){
+  const linhas = [...db.maquinas].sort((a,b)=>a.codigo.localeCompare(b.codigo)).map(m=>
+    `<tr><td>${esc(m.codigo)}</td><td><span class="tag ${m.tipo==='Trator'?'t':''}">${esc(m.tipo)}</span></td><td>${esc(m.modelo)}</td><td>${esc(m.combustivel)}</td><td>${m.ativo==='0'?'Inativo':'Ativo'}</td>${botoes('maquinas',m.id,'fMaq','tituloMaq','Editar equipamento')}</tr>`);
+  tabela($('#tMaq'),[{t:'Código'},{t:'Tipo'},{t:'Modelo'},{t:'Combustível'},{t:'Situação'},{t:''}],linhas,'Nenhum equipamento cadastrado.');
+}
+function renderPainel(){
+  const mes = $('#mesPainel').value;
+  const doMes = d => (d||'').slice(0,7)===mes;
+  const ab = db.abastecimentos.filter(a=>doMes(a.data));
+  const ny = db.nylon.filter(a=>doMes(a.data));
+  const os = db.ordens.filter(o=>doMes(o.inicio));
+  const litros = ab.reduce((s,a)=>s+(+a.litros||0),0);
+  const custo = ab.reduce((s,a)=>s+(+a.litros||0)*(+a.valorLitro||0),0);
+  const litRoc = ab.filter(a=>maq(a.maquinaId)?.tipo==='Roçadeira Costal').reduce((s,a)=>s+(+a.litros||0),0);
+  const litTra = ab.filter(a=>maq(a.maquinaId)?.tipo==='Trator').reduce((s,a)=>s+(+a.litros||0),0);
+  const nylon = ny.reduce((s,a)=>s+(+a.nylon||0),0), faca = ny.reduce((s,a)=>s+(+a.faca||0),0);
+  const horas = os.reduce((s,o)=>s+horasEntre(o.inicio,o.fim),0);
+  const hh = os.reduce((s,o)=>s+horasEntre(o.inicio,o.fim)*(+o.qtdColab||0),0);
+  const k = (t,v,r='')=>`<div class="kpi"><div class="r">${t}</div><div class="v">${v}</div><div class="r">${r}</div></div>`;
+  $('#kpis').innerHTML =
+    k('Combustível no mês', num(litros)+' L', custo?brl(custo):'sem valor informado') +
+    k('Roçadeiras costais', num(litRoc)+' L') +
+    k('Tratores', num(litTra)+' L') +
+    k('Nylon / Faca', `${num(nylon)} / ${num(faca,0)}`, `${ny.length} lançamentos`) +
+    k('Ordens de serviço', os.length, `${hhmm(horas)} trabalhadas`) +
+    k('Homem-hora', num(hh), litros&&hh?num(litros/hh)+' L por homem-hora':'');
+  const agrupar = (lista,chave,nome)=>{ const g={}; lista.forEach(a=>{g[a[chave]]=(g[a[chave]]||0)+(+a.litros||0);});
+    const arr=Object.entries(g).sort((a,b)=>b[1]-a[1]); const max=arr[0]?.[1]||1;
+    return arr.map(([id,v])=>`<tr><td>${esc(nome(id))}</td><td class="num">${num(v)} L</td><td style="width:40%"><div class="barra"><i style="width:${v/max*100}%"></i></div></td></tr>`); };
+  tabela($('#tPainelMaq'),[{t:'Equipamento'},{t:'Litros',n:1},{t:''}],agrupar(ab,'maquinaId',nomeMaq),'Sem abastecimentos neste mês.');
+  tabela($('#tPainelCol'),[{t:'Colaborador'},{t:'Litros',n:1},{t:''}],agrupar(ab,'colabId',nomeColab),'Sem abastecimentos neste mês.');
+}
+function render(){ preencherSelects(); renderPainel(); renderAbast(); renderNylon(); renderOS(); renderColab(); renderMaq(); }
+['abDe','abAte','abMaq','nyDe','nyAte','osDe','osAte','mesPainel'].forEach(id=>$('#'+id).addEventListener('change',render));
+
+/* ===================== EXPORTAÇÃO ===================== */
+function baixar(nome, conteudo, tipo){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([conteudo],{type:tipo})); a.download=nome; a.click(); URL.revokeObjectURL(a.href);
+}
+function exportarCSV(col){
+  let cab, linhas;
+  if(col==='abastecimentos'){ cab=['Data','Equipamento','Tipo','Operador','Combustível','Litros','R$/L','Total R$','Horímetro','Local','Obs'];
+    linhas=db.abastecimentos.map(a=>[dataBR(a.data),nomeMaq(a.maquinaId),maq(a.maquinaId)?.tipo,nomeColab(a.colabId),a.combustivel,num(a.litros),num(a.valorLitro),num((+a.litros||0)*(+a.valorLitro||0)),a.horimetro,a.local,a.obs]); }
+  if(col==='nylon'){ cab=['Data','Equipamento','Operador','Nylon','Unidade','Faca','Local','Obs'];
+    linhas=db.nylon.map(a=>[dataBR(a.data),nomeMaq(a.maquinaId),nomeColab(a.colabId),num(a.nylon),a.unNylon,a.faca,a.local,a.obs]); }
+  if(col==='ordens'){ cab=['Nº OS','Local','Tipo','Início','Fim','Horas','Qtd colaboradores','Homem-hora','Equipe','Área m²','Descrição'];
+    linhas=db.ordens.map(o=>{const h=horasEntre(o.inicio,o.fim); return [o.numero,o.local,o.tipo,dtBR(o.inicio),dtBR(o.fim),num(h),o.qtdColab,num(h*(+o.qtdColab||0)),(o.colabs||[]).map(nomeColab).join(', '),o.area,o.obs];}); }
+  const csv = [cab,...linhas].map(l=>l.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';')).join('\r\n');
+  baixar(`${col}_${hoje()}.csv`, '\ufeff'+csv, 'text/csv;charset=utf-8');
+}
+function exportarBackup(){ baixar(`backup_combustivel_${hoje()}.json`, JSON.stringify(db,null,2), 'application/json'); }
+function importarBackup(inp){
+  const f=inp.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{ const d=JSON.parse(r.result); if(!confirm('Substituir todos os dados atuais pelo backup?')) return;
+    db=Object.assign(vazio(),d); salvar(); render(); toast('Backup restaurado.'); }catch(e){ alert('Arquivo de backup inválido.'); } inp.value=''; };
+  r.readAsText(f);
+}
+
+/* ===================== INÍCIO ===================== */
+carregar();
+$('#mesPainel').value = hoje().slice(0,7);
+['fAbast','fNylon'].forEach(id=>document.getElementById(id).data.value=hoje());
+render();
+</script>
+</body>
+</html>
