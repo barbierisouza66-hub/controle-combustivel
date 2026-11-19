@@ -169,7 +169,7 @@
 </div>
 
 <header>
-  <h1 id="logo">SGC <small>Sistema de Gerenciamento de Contratos · versão 1.7</small></h1>
+  <h1 id="logo">SGC <small>Sistema de Gerenciamento de Contratos · versão 1.8</small></h1>
   <div class="acoes">
     <span class="usuario" id="usuarioEmail"></span>
     <button id="btnContratos" hidden>← Contratos</button>
@@ -263,8 +263,12 @@ const ENT = {
 
   colaboradores: { nome:'colaborador', titulo:r=>r.nome, ordem:(a,b)=>String(a.nome).localeCompare(b.nome), campos:[
       {k:'nome',l:'Nome',req:1},{k:'matricula',l:'Matrícula'},{k:'funcao',l:'Função',t:'list',op:funcoes},{k:'admissao',l:'Admissão',t:'date',semDef:1},
-      {k:'telefone',l:'Telefone'},{k:'horasDia',l:'Jornada diária (h)',t:'number',step:'0.01'},{k:'horasSemana',l:'Jornada semanal (h)',t:'number',step:'0.01'},{k:'salario',l:'Salário mensal (R$)',t:'number'},{k:'valorHora',l:'Valor da hora (R$) – só se não houver salário',t:'number',step:'0.0001'},{k:'ativo',l:'Situação',t:'select',op:['Ativo','Inativo']}],
-    cols:[col('Nome',r=>r.nome),col('Matrícula',r=>r.matricula),col('Função',r=>r.funcao),col('Admissão',r=>dataBR(r.admissao)),col('Telefone',r=>r.telefone),col('Jornada',r=>`${num(jDia(r))} h/dia · ${num(jSem(r))} h/sem`),col('Valor/hora',r=>vHora(r)?brl(vHora(r)):'—',{n:1}),col('Situação',r=>sitTag(r.ativo||'Ativo'),{html:1})] },
+      {k:'telefone',l:'Telefone'},
+      {k:'sqEntrada',l:'Seg a Qui – entrada',t:'time'},{k:'sqSaida',l:'Seg a Qui – saída',t:'time'},{k:'sqIntervalo',l:'Seg a Qui – intervalo (min)',t:'number',step:'5',def:'60'},
+      {k:'sxEntrada',l:'Sexta – entrada',t:'time'},{k:'sxSaida',l:'Sexta – saída',t:'time'},{k:'sxIntervalo',l:'Sexta – intervalo (min)',t:'number',step:'5',def:'60'},
+      {k:'horasDia',l:'Jornada diária (h) – só sem horário',t:'number',step:'0.01'},{k:'horasSemana',l:'Jornada semanal (h) – só sem horário',t:'number',step:'0.01'},{k:'salario',l:'Salário mensal (R$)',t:'number'},{k:'valorHora',l:'Valor da hora (R$) – só se não houver salário',t:'number',step:'0.0001'},{k:'ativo',l:'Situação',t:'select',op:['Ativo','Inativo']}],
+    extra:f=>{ const c = Object.fromEntries(new FormData(f).entries()); return temHorario(c) ? `Jornada calculada: Seg a Qui ${hhmm(hSegQui(c))}/dia · Sexta ${hhmm(hSex(c))} · Semana ${hhmm(jSem(c))} (divisor ${num(jSem(c)*5,0)} h) · Sábado, domingo e feriado = hora extra` : 'Preencha os horários de seg a qui e de sexta para o sistema calcular a jornada (sábado, domingo e feriado viram hora extra).'; },
+    cols:[col('Nome',r=>r.nome),col('Matrícula',r=>r.matricula),col('Função',r=>r.funcao),col('Admissão',r=>dataBR(r.admissao)),col('Telefone',r=>r.telefone),col('Horário',r=>textoHorario(r)),col('Semana',r=>`${hhmm(jSem(r))} (÷${num(jSem(r)*5,0)})`,{n:1}),col('Valor/hora',r=>vHora(r)?brl(vHora(r)):'—',{n:1}),col('Situação',r=>sitTag(r.ativo||'Ativo'),{html:1})] },
 
   equipamentos: { nome:'equipamento', titulo:r=>`${r.codigo} – ${r.tipo}${r.modelo?' ('+r.modelo+')':''}`, ordem:(a,b)=>String(a.codigo).localeCompare(b.codigo), campos:[
       {k:'codigo',l:'Código / Patrimônio',req:1},{k:'tipo',l:'Tipo',t:'select',op:TIPOS_EQ},{k:'modelo',l:'Marca / Modelo'},{k:'placa',l:'Placa / Nº de série'},
@@ -442,6 +446,7 @@ function campoHTML(k, f){
     case 'list': return `<label>${rot}<input name="${f.k}" list="dl_${k}_${f.k}"${req} autocomplete="off"><datalist id="dl_${k}_${f.k}">${f.op().map(o=>`<option value="${esc(o)}">`).join('')}</datalist></label>`;
     case 'number': return `<label>${rot}<input type="number" name="${f.k}" step="${f.step||'0.01'}" min="0"${req}></label>`;
     case 'date': return `<label>${rot}<input type="date" name="${f.k}"${req}></label>`;
+    case 'time': return `<label>${rot}<input type="time" name="${f.k}"${req}></label>`;
     case 'datetime': return `<label>${rot}<input type="datetime-local" name="${f.k}"${req}></label>`;
     default: return `<label>${rot}<input type="text" name="${f.k}"${req}></label>`;
   }
@@ -628,8 +633,19 @@ function painelGeral(){
 const STATUS_FREQ = ['Presente','Falta','Falta justificada','Atestado','Afastamento','Férias','Folga','Feriado'];
 const COM_CID = ['Atestado','Afastamento'];
 const DIAS_SEMANA = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
-const jDia = c => +c?.horasDia || jornada();
-const jSem = c => +c?.horasSemana || jornadaSemana();
+// Horário de trabalho do cadastro: seg–qui e sexta (entrada, saída, intervalo). Sábado, domingo e feriado = hora extra.
+function horasDoHorario(e, s, intervalo){
+  if(!e || !s) return 0;
+  const [eh,em] = e.split(':').map(Number), [sh,sm] = s.split(':').map(Number);
+  let t = (sh*60+sm) - (eh*60+em); if(t < 0) t += 1440;          // horário que vira a meia-noite
+  return Math.max(0, (t - (+intervalo||0)) / 60);
+}
+const hSegQui = c => horasDoHorario(c?.sqEntrada, c?.sqSaida, c?.sqIntervalo);
+const hSex = c => horasDoHorario(c?.sxEntrada, c?.sxSaida, c?.sxIntervalo);
+const temHorario = c => hSegQui(c) > 0 && hSex(c) > 0;
+const textoHorario = c => temHorario(c) ? `Seg–Qui ${c.sqEntrada}–${c.sqSaida} · Sex ${c.sxEntrada}–${c.sxSaida}` : '—';
+const jDia = c => temHorario(c) ? hSegQui(c) : (+c?.horasDia || jornada());
+const jSem = c => temHorario(c) ? 4*hSegQui(c) + hSex(c) : (+c?.horasSemana || jornadaSemana());
 const vHora = c => +c?.salario ? +c.salario / (jSem(c)*5) : (+c?.valorHora || 0);   // salário ÷ divisor (44 h/sem → 220)
 const pctHE = () => (contrato?.adicionalHE===undefined || contrato?.adicionalHE==='') ? 50 : +contrato.adicionalHE;
 const minutos = t => { if(!t) return null; const [h,m] = String(t).split(':').map(Number); return isNaN(h) ? null : h*60+(m||0); };
@@ -887,10 +903,15 @@ const divisorHora = c => jSem(c) * 5;
 const salarioBase = c => +c?.salario || (+c?.valorHora ? +c.valorHora * divisorHora(c) : 0);
 const pctHE100 = () => (contrato?.adicionalHE100===undefined || contrato?.adicionalHE100==='') ? 100 : +contrato.adicionalHE100;
 function tipoDia(d){ const dow = new Date(d+'T12:00:00').getDay(); return feriado(d) ? 'fer' : dow===0 ? 'dom' : dow===6 ? 'sab' : 'util'; }
-function jornadaDoDia(c, d){ const t = tipoDia(d); return t==='util' ? jDia(c) : t==='sab' ? Math.max(0, +(jSem(c) - 5*jDia(c)).toFixed(2)) : 0; }
+function jornadaDoDia(c, d){
+  const t = tipoDia(d);
+  if(temHorario(c)){ if(t!=='util') return 0; return new Date(d+'T12:00:00').getDay()===5 ? hSex(c) : hSegQui(c); }   // sábado, domingo e feriado: tudo é HE
+  return t==='util' ? jDia(c) : t==='sab' ? Math.max(0, +(jSem(c) - 5*jDia(c)).toFixed(2)) : 0;
+}
 // horas trabalhadas → horas normais, HE 50%, HE 100% e horas não trabalhadas (desconto)
 function calcDia(c, d, htInformado){
-  const t = tipoDia(d), jd = jornadaDoDia(c, d), h = +htInformado || jd || jDia(c);
+  const dow = new Date(d+'T12:00:00').getDay(), padrao = temHorario(c) && dow===5 ? hSex(c) : jDia(c);   // campo vazio: horário daquele dia da semana
+  const t = tipoDia(d), jd = jornadaDoDia(c, d), h = +htInformado || jd || padrao;
   if(t==='dom' || t==='fer') return { h, normais:0, he50:0, he100:h, naoTrab:0 };
   return { h, normais:Math.min(h, jd), he50:Math.max(0, h-jd), he100:0, naoTrab:Math.max(0, jd-h) };
 }
@@ -903,7 +924,7 @@ function telaCalendarioRH(){
   if(!colabs.length) return `<div class="card"><p style="margin:0">Cadastre os colaboradores em <b>Cadastros → Colaboradores</b> para usar o calendário.</p></div>` + lista;
   if(!colabs.some(c=>c.id===est.calColab)) est.calColab = colabs[0].id;
   const cid = est.calColab, mes = mesDaGrade(), [y,m] = mes.split('-').map(Number), nDias = new Date(y, m, 0).getDate();
-  const c = colabs.find(x=>x.id===cid), primeiro = new Date(y, m-1, 1).getDay(), jSab = Math.max(0, +(jSem(c) - 5*jDia(c)).toFixed(2));
+  const c = colabs.find(x=>x.id===cid), primeiro = new Date(y, m-1, 1).getDay(), jSab = temHorario(c) ? 0 : Math.max(0, +(jSem(c) - 5*jDia(c)).toFixed(2));
   const cel = [];
   for(let i=0;i<primeiro;i++) cel.push('<div class="d fora"></div>');
   for(let dia=1; dia<=nDias; dia++){
@@ -926,7 +947,7 @@ function telaCalendarioRH(){
       <button id="calAnt" title="Colaborador anterior">◀</button>
       <select id="calColab" style="min-width:240px">${colabs.map(x=>`<option value="${x.id}" ${x.id===cid?'selected':''}>${esc(x.nome)}</option>`).join('')}</select>
       <button id="calProx" title="Próximo colaborador">▶</button>
-      <b>${mesBR(mes)}</b><span class="info" style="margin:0">${esc(c.funcao||'')}${c.funcao?' · ':''}jornada ${num(jDia(c))} h seg–sex · sábado ${num(jSab)} h · ${num(jSem(c))} h/semana</span><span style="flex:1"></span>
+      <b>${mesBR(mes)}</b><span class="info" style="margin:0">${esc(c.funcao||'')}${c.funcao?' · ':''}${temHorario(c) ? `Seg–Qui ${c.sqEntrada}–${c.sqSaida} (${hhmm(hSegQui(c))}) · Sex ${c.sxEntrada}–${c.sxSaida} (${hhmm(hSex(c))}) · ${hhmm(jSem(c))}/semana · sáb, dom e feriado = HE` : `jornada ${num(jDia(c))} h seg–sex · sábado ${num(jSab)} h · ${num(jSem(c))} h/semana · <b>cadastre o horário do colaborador</b>`}</span><span style="flex:1"></span>
       <button id="calUteis">Marcar dias úteis vazios como Presença (até hoje)</button><button class="pri" id="calSalvar">Salvar mês</button></div>
     <div class="valorbox"><b>💰 Valor financeiro de ${esc(c.nome)}</b>
       <label>Salário mensal (R$) <input type="number" id="calSal" step="0.01" min="0" value="${sal?(+sal.toFixed(2)):''}" placeholder="Ex.: 2200,00"></label>
