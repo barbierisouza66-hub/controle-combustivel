@@ -79,6 +79,25 @@
   table.freq .s{font-size:12px;color:var(--muted)}
   table.freq tr.alterada td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
   table.freq input:disabled{background:#f3f4f3;color:#aaa}
+  table.grade{font-size:12px}
+  table.grade th,table.grade td{padding:3px 2px;text-align:center;white-space:nowrap}
+  table.grade th.dia{cursor:pointer;font-size:12px;line-height:1.1;min-width:38px}
+  table.grade th.dia:hover{color:var(--pri);text-decoration:underline}
+  table.grade th.hoje{background:var(--pri2);color:var(--pri)}
+  table.grade .fds{background:#f1f3f2}
+  table.grade .nome{text-align:left;position:sticky;left:0;background:#fff;z-index:1;padding:4px 8px;min-width:150px;box-shadow:1px 0 0 var(--line)}
+  table.grade thead .nome{background:#fafbfa}
+  table.grade .nome .s{font-size:11px;color:var(--muted)}
+  table.grade .tot{font-weight:600;background:#fafbfa;min-width:52px;font-size:12px}
+  table.grade .tot.ult{box-shadow:inset -2px 0 0 var(--line)}
+  main:has(table.grade){max-width:none}
+  table.grade select.cel{width:40px;padding:3px 0;font-size:12px;font-weight:600;text-align:center;text-align-last:center;appearance:none;-webkit-appearance:none;border-radius:4px;cursor:pointer}
+  table.grade td.prev select.cel{outline:2px dashed var(--warn);outline-offset:-2px}
+  select.cel.s-P{background:#e6f2ec;color:#1f6f4a;border-color:#b9dcc9}
+  select.cel.s-F,select.cel.s-FJ{background:#fdecea;color:#b42318;border-color:#f3c1bb}
+  select.cel.s-A{background:#fdf0e7;color:#b4541b;border-color:#f2cfb6}
+  select.cel.s-AF{background:#f3e8fb;color:#7a2fa8;border-color:#dcc3ef}
+  select.cel.s-FE,select.cel.s-FO,select.cel.s-FR{background:#eef0ef;color:#555}
   details.card summary{cursor:pointer;font-weight:600}
   details.card[open] summary{margin-bottom:14px}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:8px;opacity:0;transition:.25s;pointer-events:none;z-index:70}
@@ -565,9 +584,9 @@ function horasSemanaOutrosDias(colabId, data){
   return soma(L('frequencia').filter(r=>r.colabId===colabId && r.data>=ini && r.data<=fim && r.data!==data), r=>r.horas);
 }
 
-function telaFrequencia(){
+function telaFreqDia(){
   const d = est.dataFreq, colabs = L('colaboradores').filter(ativoColab).sort(ENT.colaboradores.ordem);
-  if(!colabs.length) return `<div class="card"><h2>RH – Frequência</h2><p style="margin:0">Cadastre os colaboradores em <b>Cadastros → Colaboradores</b> para montar a folha.</p></div>`;
+  if(!colabs.length) return `<div class="card"><p style="margin:0">Nenhum colaborador ativo. Use <b>+ Cadastrar colaborador</b> acima.</p></div>`;
   const linhas = colabs.map(c=>{
     let r = registroFreq(c.id, d), prev = false;
     if(!r){ const cob = cobertura(c.id, d); r = cob ? { status:cob.status, cid:cob.cid, obs:`Continuação (${cob.status.toLowerCase()} de ${dataBR(cob.data)})` } : {}; prev = !!cob; }
@@ -611,8 +630,7 @@ function linhaFreq(tr){
   o('semana').innerHTML = sem > hs ? tag(num(sem,1)+' / '+num(hs,0),'w') : num(sem,1)+' / '+num(hs,0);
   return { ...r, horas, he, hd, hs, cid:g('cid').value.trim().toUpperCase(), dias:g('dias').value, obs:g('obs').value.trim() };
 }
-function prepFrequencia(){
-  freqAlterada = false;
+function prepFreqDia(){
   const tb = document.querySelector('table.freq tbody'); if(!tb) return;
   tb.querySelectorAll('tr').forEach(linhaFreq);
   tb.addEventListener('input', e=>{ const tr=e.target.closest('tr'); tr.classList.add('alterada'); freqAlterada=true; linhaFreq(tr); });
@@ -635,18 +653,101 @@ async function salvarFrequencia(){
     } else if(registroFreq(c.id, d)) apagar.push(id);
     if(String(v.hd)!==String(jDia(c)) || String(v.hs)!==String(jSem(c))) colabsAlt.push({ ...c, horasDia:String(v.hd), horasSemana:String(v.hs) });
   });
+  if(await gravarFrequencias(regs, apagar, colabsAlt)) toast(`Dia ${dataBR(d)} salvo: ${regs.length} colaborador(es).`);
+}
+/* ---------- Frequência: tela principal (grade do mês ou dia detalhado) ---------- */
+const COD_FREQ = { 'Presente':'P', 'Falta':'F', 'Falta justificada':'FJ', 'Atestado':'A', 'Afastamento':'AF', 'Férias':'FE', 'Folga':'FO', 'Feriado':'FR' };
+const STATUS_COD = Object.fromEntries(Object.entries(COD_FREQ).map(([s,c])=>[c,s]));
+const INICIAIS = ['D','S','T','Q','Q','S','S'];
+if(!est.freqVista) est.freqVista = 'mes';
+function telaFrequencia(){
+  const cad = `<details class="card" id="cadColabFreq"><summary>+ Cadastrar colaborador</summary><div class="card" style="border:none;padding:0;margin:0"><h2 hidden></h2>${formHTML('colaboradores')}</div></details>`;
+  const vistas = `<nav class="abas" style="margin-bottom:12px"><button data-freqvista="mes" class="${est.freqVista==='mes'?'ativo':''}">Grade do mês</button><button data-freqvista="dia" class="${est.freqVista==='dia'?'ativo':''}">Dia detalhado (horários e CID)</button></nav>`;
+  return vistas + cad + (est.freqVista==='mes' ? telaFreqMes() : telaFreqDia());
+}
+function prepFrequencia(){
+  freqAlterada = false;
+  prepararForm('colaboradores');
+  document.querySelectorAll('[data-freqvista]').forEach(b=>b.addEventListener('click', ()=>{
+    if(freqAlterada && !confirm('Há alterações não salvas. Sair sem salvar?')) return;
+    freqAlterada = false; est.freqVista = b.dataset.freqvista; renderTudo(); }));
+  if(est.freqVista==='mes') prepFreqMes(); else prepFreqDia();
+}
+function mesDaGrade(){ return est.mes || hoje().slice(0,7); }
+function telaFreqMes(){
+  const mes = mesDaGrade(), [y,m] = mes.split('-').map(Number), nDias = new Date(y, m, 0).getDate();
+  const datas = Array.from({length:nDias}, (_,i)=>`${mes}-${String(i+1).padStart(2,'0')}`);
+  const colabs = L('colaboradores').filter(ativoColab).sort(ENT.colaboradores.ordem);
+  if(!colabs.length) return `<div class="card"><p style="margin:0">Nenhum colaborador ativo. Use <b>+ Cadastrar colaborador</b> acima.</p></div>`;
+  const fds = d => [0,6].includes(new Date(d+'T12:00:00').getDay());
+  const cab = datas.map(d=>`<th class="dia ${fds(d)?'fds':''} ${d===hoje()?'hoje':''}" data-irdia="${d}" title="Abrir ${dataBR(d)} no dia detalhado">${+d.slice(8)}<br><small>${INICIAIS[new Date(d+'T12:00:00').getDay()]}</small></th>`).join('');
+  const opts = cod => ['<option value=""></option>', ...Object.entries(COD_FREQ).map(([s,c])=>`<option value="${c}" title="${s}" ${c===cod?'selected':''}>${c}</option>`)].join('');
+  const linhas = colabs.map(c=>{
+    const cels = datas.map(d=>{
+      const r = registroFreq(c.id, d), cob = !r && cobertura(c.id, d), st = r?.status || (cob ? cob.status : ''), cod = COD_FREQ[st] || '';
+      return `<td class="${fds(d)?'fds':''} ${cob?'prev':''}"><select data-d="${d}" ${cob?'data-prev="1"':''} class="cel s-${cod}" title="${esc(st||'não lançado')}${r?.cid?' · CID '+esc(r.cid):''}">${opts(cod)}</select></td>`;
+    }).join('');
+    return `<tr data-c="${c.id}"><td class="nome"><b>${esc(c.nome)}</b><div class="s">${esc(c.funcao||'')}</div></td>
+      <td class="tot" data-t="P"></td><td class="tot" data-t="F"></td><td class="tot" data-t="A"></td><td class="tot" data-t="AF"></td><td class="tot" data-t="O"></td><td class="tot ult" data-t="HE"></td>${cels}</tr>`;
+  }).join('');
+  return `<div class="card"><div class="filtros"><h2 style="margin:0">Frequência de ${mesBR(mes)}</h2><span class="info" style="margin:0">(troque o mês no seletor do topo)</span><span style="flex:1"></span>
+      <button id="gradeHoje">Marcar hoje como P para quem está vazio</button><button class="pri" id="gradeSalvar">Salvar mês</button></div>
+    <div class="tabela-wrap"><table class="grade"><thead><tr><th class="nome">Colaborador</th>
+      <th class="tot" title="Presente">Presente</th><th class="tot" title="Falta + falta justificada">Falta</th><th class="tot">Atestado</th><th class="tot">Dias afast.</th><th class="tot" title="Férias, folga e feriado">Outros</th><th class="tot ult" title="Horas extras lançadas no dia detalhado">H. extra</th>${cab}</tr></thead>
+      <tbody>${linhas}</tbody></table></div>
+    <p class="info"><b>P</b> presente · <b>F</b> falta · <b>FJ</b> falta justificada · <b>A</b> atestado · <b>AF</b> afastamento · <b>FE</b> férias · <b>FO</b> folga · <b>FR</b> feriado.
+      Clique no número do dia para lançar horários, horas extras e CID. Dias em laranja continuam um atestado/afastamento lançado antes e são gravados ao salvar o mês.</p></div>`;
+}
+function totaisLinha(tr){
+  const vals = [...tr.querySelectorAll('select.cel')].map(s=>s.value), n = c => vals.filter(v=>v===c).length;
+  const t = (k, v) => tr.querySelector(`[data-t="${k}"]`).textContent = v;
+  t('P', n('P')); t('F', n('F')+n('FJ')); t('A', n('A')); t('AF', n('AF')); t('O', n('FE')+n('FO')+n('FR'));
+  const he = soma(L('frequencia').filter(r=>r.colabId===tr.dataset.c && r.data.startsWith(mesDaGrade())), r=>r.he);
+  t('HE', he ? hhmm(he) : '');
+}
+function prepFreqMes(){
+  const tb = document.querySelector('table.grade tbody'); if(!tb) return;
+  tb.querySelectorAll('tr').forEach(totaisLinha);
+  tb.addEventListener('change', e=>{ const s=e.target; if(!s.matches('select.cel')) return;
+    s.className = 'cel s-'+s.value; s.dataset.mudou = '1'; s.closest('td').classList.remove('prev'); freqAlterada = true; totaisLinha(s.closest('tr')); });
+  document.querySelectorAll('[data-irdia]').forEach(th=>th.addEventListener('click', ()=>{
+    if(freqAlterada && !confirm('Há alterações não salvas no mês. Sair sem salvar?')) return;
+    freqAlterada = false; est.dataFreq = th.dataset.irdia; est.freqVista = 'dia'; renderTudo(); }));
+  $('#gradeHoje').addEventListener('click', ()=>{
+    const d = hoje(); if(!d.startsWith(mesDaGrade())){ alert('Hoje não está no mês exibido.'); return; }
+    tb.querySelectorAll(`select[data-d="${d}"]`).forEach(s=>{ if(!s.value){ s.value='P'; s.className='cel s-P'; s.dataset.mudou='1'; freqAlterada=true; totaisLinha(s.closest('tr')); } });
+  });
+  $('#gradeSalvar').addEventListener('click', salvarGrade);
+}
+async function salvarGrade(){
+  const regs = [], apagar = [];
+  document.querySelectorAll('table.grade select.cel').forEach(s=>{
+    if(!s.dataset.mudou && !s.dataset.prev) return;
+    const colabId = s.closest('tr').dataset.c, d = s.dataset.d, c = L('colaboradores').find(x=>x.id===colabId), ex = registroFreq(colabId, d);
+    if(!s.value){ if(ex) apagar.push(ex.id); return; }
+    const status = STATUS_COD[s.value], o = ex ? { ...ex, status } : { id:freqId(colabId, d), colabId, data:d, status, obs:'' };
+    if(status==='Presente'){ if(!ex || ex.status!=='Presente'){ o.horas = jDia(c); o.he = 0; delete o.entrada; delete o.saida; } }
+    else { o.horas = 0; o.he = 0; delete o.entrada; delete o.saida; delete o.intervalo; }
+    if(!COM_CID.includes(status)){ delete o.cid; delete o.dias; }
+    else if(!ex){ const cob = cobertura(colabId, d); if(cob && cob.status===status){ o.cid = cob.cid; o.obs = `Continuação (${status.toLowerCase()} de ${dataBR(cob.data)})`; } }
+    regs.push(o);
+  });
+  if(!regs.length && !apagar.length){ toast('Nada para salvar.'); return; }
+  if(await gravarFrequencias(regs, apagar, [])) toast(`Mês salvo: ${regs.length} lançamento(s)${apagar.length?`, ${apagar.length} removido(s)`:''}.`);
+}
+async function gravarFrequencias(regs, apagar, colabsAlt){
   carregando(true);
   try{
     const linhas = [...regs.map(o=>({ k:'frequencia', o })), ...colabsAlt.map(o=>({ k:'colaboradores', o }))]
       .map(({k,o})=>{ const { id, ...dados } = o; return { id, colecao:k, contrato_id:contrato.id, dados, atualizado_em:new Date().toISOString() }; });
     if(linhas.length){ const { error } = await sb.from(TABELA).upsert(linhas); if(error) throw error; }
     if(apagar.length){ const { error } = await sb.from(TABELA).delete().in('id', apagar); if(error) throw error; }
-  }catch(e){ carregando(false); alert('Não foi possível salvar o dia: '+(e.message||e)); return; }
+  }catch(e){ carregando(false); alert('Não foi possível salvar: '+(e.message||e)); return false; }
   carregando(false);
-  db.frequencia = L('frequencia').filter(r=>r.data!==d).concat(regs);
+  const ids = new Set([...regs.map(r=>r.id), ...apagar]);
+  db.frequencia = L('frequencia').filter(r=>!ids.has(r.id)).concat(regs);
   colabsAlt.forEach(c=>{ const i=db.colaboradores.findIndex(x=>x.id===c.id); if(i>-1) db.colaboradores[i]=c; });
-  freqAlterada = false;
-  toast(`Dia ${dataBR(d)} salvo: ${regs.length} colaborador(es).`); renderTudo();
+  freqAlterada = false; renderTudo(); return true;
 }
 function painelFrequencia(){
   const fr = doMes(L('frequencia'),'data');
@@ -707,8 +808,8 @@ function telaDoContrato(){
   bc.innerHTML = `<div><div class="nome">${esc(contrato.nome)}</div><div class="sub">${esc([contrato.cliente,contrato.local].filter(Boolean).join(' · '))}</div></div>
     <div class="mes"><label style="flex-direction:row;align-items:center;gap:6px">Mês <input type="month" id="mesRef" value="${est.mes}" ${est.mes?'':'disabled'}></label>
     <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="todosMeses" ${est.mes?'':'checked'}> todos os meses</label></div>`;
-  $('#mesRef').addEventListener('change', e=>{ est.mes = e.target.value || hoje().slice(0,7); renderTudo(); });
-  $('#todosMeses').addEventListener('change', e=>{ est.mes = e.target.checked ? '' : hoje().slice(0,7); renderTudo(); });
+  $('#mesRef').addEventListener('change', e=>{ if(freqAlterada && !confirm('Há alterações não salvas na frequência. Trocar de mês sem salvar?')){ e.target.value=est.mes; return; } freqAlterada=false; est.mes = e.target.value || hoje().slice(0,7); renderTudo(); });
+  $('#todosMeses').addEventListener('change', e=>{ if(freqAlterada && !confirm('Há alterações não salvas na frequência. Continuar sem salvar?')){ e.target.checked=!e.target.checked; return; } freqAlterada=false; est.mes = e.target.checked ? '' : hoje().slice(0,7); renderTudo(); });
   const nav = $('#navMods'); nav.hidden = false;
   nav.innerHTML = mods.map(m=>`<button data-mod="${m.id}" class="${m.id===est.mod?'ativo':''}">${esc(m.nome)}</button>`).join('');
   const abas = mod.abas.length>1 ? `<nav class="abas">${mod.abas.map((a,i)=>`<button data-aba="${i}" class="${a===aba?'ativo':''}">${esc(a.nome)}</button>`).join('')}</nav>` : '';
