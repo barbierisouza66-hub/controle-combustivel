@@ -142,6 +142,7 @@
   .carregando{position:fixed;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,var(--pri),transparent);background-size:200% 100%;animation:car 1s linear infinite;z-index:60;display:none}
   .carregando.on{display:block}
   #avisoVersao{position:sticky;top:0;z-index:80;background:#fdf0e7;color:var(--warn);border-bottom:1px solid #f2cfb6;padding:10px 20px;font-weight:600;display:flex;gap:12px;align-items:center;justify-content:center}
+  .alerta{background:#fdecea;color:var(--danger);border:1px solid #f3c1bb;border-radius:8px;padding:10px 14px;margin:0 0 12px}
   #avisoVersao button{background:var(--warn);color:#fff;border-color:var(--warn)}
   @keyframes car{from{background-position:100% 0}to{background-position:-100% 0}}
   @media print{header .acoes,nav,form,.linha-botoes,button,details{display:none!important}}
@@ -190,7 +191,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '1.9';
+const VERSAO = '2.0';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -223,6 +224,15 @@ const hoje = () => { const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezo
 const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 const mesBR = m => m ? MESES[+m.slice(5,7)-1]+' de '+m.slice(0,4) : '';
 const soma = (l,f) => l.reduce((s,r)=>s+(+f(r)||0),0);
+// Valor digitado no padrão brasileiro: "2.400,00", "2.400", "2400" ou "2400.5" → número
+function numBR(v){
+  let t = String(v ?? '').replace(/[R$\s]/g,'');
+  if(!t) return '';
+  if(t.includes(',')) t = t.replace(/\./g,'').replace(',','.');          // vírgula = decimal; pontos = milhar
+  else if(/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g,'');     // "2.400" = dois mil e quatrocentos
+  const n = parseFloat(t); return isNaN(n) ? '' : n;
+}
+const fmtBR = v => (v===''||v==null||isNaN(+v)) ? '' : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:4});
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+Math.random().toString(36).slice(2,9));
 function horasEntre(a,b){ if(!a||!b) return 0; const h=(new Date(b)-new Date(a))/36e5; return h>0?h:0; }
 function hhmm(h){ const t=Math.round(h*60); return `${Math.floor(t/60)}h${String(t%60).padStart(2,'0')}`; }
@@ -284,7 +294,7 @@ const ENT = {
       {k:'telefone',l:'Telefone'},
       {k:'sqEntrada',l:'Seg a Qui – entrada',t:'time'},{k:'sqSaida',l:'Seg a Qui – saída',t:'time'},{k:'sqIntervalo',l:'Seg a Qui – intervalo (min)',t:'number',step:'5',def:'60'},
       {k:'sxEntrada',l:'Sexta – entrada',t:'time'},{k:'sxSaida',l:'Sexta – saída',t:'time'},{k:'sxIntervalo',l:'Sexta – intervalo (min)',t:'number',step:'5',def:'60'},
-      {k:'horasDia',l:'Jornada diária (h) – só sem horário',t:'number',step:'0.01'},{k:'horasSemana',l:'Jornada semanal (h) – só sem horário',t:'number',step:'0.01'},{k:'salario',l:'Salário mensal (R$)',t:'number'},{k:'valorHora',l:'Valor da hora (R$) – só se não houver salário',t:'number',step:'0.0001'},{k:'ativo',l:'Situação',t:'select',op:['Ativo','Inativo']}],
+      {k:'horasDia',l:'Jornada diária (h) – só sem horário',t:'number',step:'0.01'},{k:'horasSemana',l:'Jornada semanal (h) – só sem horário',t:'number',step:'0.01'},{k:'salario',l:'Salário mensal (R$)',t:'moeda'},{k:'valorHora',l:'Valor da hora (R$) – só se não houver salário',t:'moeda'},{k:'ativo',l:'Situação',t:'select',op:['Ativo','Inativo']}],
     extra:f=>{ const c = Object.fromEntries(new FormData(f).entries()); return temHorario(c) ? `Jornada calculada: Seg a Qui ${hhmm(hSegQui(c))}/dia · Sexta ${hhmm(hSex(c))} · Semana ${hhmm(jSem(c))} (divisor ${num(jSem(c)*5,0)} h) · Sábado, domingo e feriado = hora extra` : 'Preencha os horários de seg a qui e de sexta para o sistema calcular a jornada (sábado, domingo e feriado viram hora extra).'; },
     cols:[col('Nome',r=>r.nome),col('Matrícula',r=>r.matricula),col('Função',r=>r.funcao),col('Admissão',r=>dataBR(r.admissao)),col('Telefone',r=>r.telefone),col('Horário',r=>textoHorario(r)),col('Semana',r=>`${hhmm(jSem(r))} (÷${num(jSem(r)*5,0)})`,{n:1}),col('Valor/hora',r=>vHora(r)?brl(vHora(r)):'—',{n:1}),col('Situação',r=>sitTag(r.ativo||'Ativo'),{html:1})] },
 
@@ -319,7 +329,7 @@ const ENT = {
 
   abastecimentos: { nome:'abastecimento', data:'data', campos:[
       {k:'data',l:'Data',t:'date',req:1},{k:'equipId',l:'Equipamento',t:'ref',ent:'equipamentos',filtro:ativoEquip,req:1},{k:'colabId',l:'Operador / Motorista',t:'ref',ent:'colaboradores',filtro:ativoColab,req:1},
-      {k:'combustivel',l:'Combustível',t:'select',op:OPT_COMB},{k:'litros',l:'Litros',t:'number',req:1},{k:'valorLitro',l:'Valor por litro (R$)',t:'number'},
+      {k:'combustivel',l:'Combustível',t:'select',op:OPT_COMB},{k:'litros',l:'Litros',t:'number',req:1},{k:'valorLitro',l:'Valor por litro (R$)',t:'moeda'},
       {k:'horimetro',l:'Horímetro / Km',t:'number',step:'0.1'},{k:'local',l:'Local / Frente'},{k:'obs',l:'Observação',t:'textarea'}],
     cols:[col('Data',r=>dataBR(r.data)),col('Equipamento',r=>nomeEquip(r.equipId)),col('Operador',r=>nomeColab(r.colabId)),col('Combustível',r=>r.combustivel),
       col('Litros',r=>num(r.litros),{n:1,tot:l=>num(soma(l,r=>r.litros))}),col('R$/L',r=>r.valorLitro?brl(r.valorLitro):'—',{n:1}),
@@ -348,7 +358,7 @@ const ENT = {
   manutencoes: { nome:'manutenção', data:'data', campos:[
       {k:'data',l:'Data de abertura',t:'date',req:1},{k:'equipId',l:'Equipamento',t:'ref',ent:'equipamentos',filtro:()=>true,req:1},{k:'tipo',l:'Tipo',t:'select',op:['Corretiva','Preventiva','Inspeção / checklist']},
       {k:'descricao',l:'Defeito / serviço',req:1},{k:'status',l:'Status',t:'select',op:['Aberta','Em andamento','Concluída']},{k:'conclusao',l:'Data de conclusão',t:'date',semDef:1},
-      {k:'horasParado',l:'Horas parado',t:'number'},{k:'custo',l:'Custo (R$)',t:'number'},{k:'responsavel',l:'Responsável / Oficina'},{k:'obs',l:'Observação',t:'textarea'}],
+      {k:'horasParado',l:'Horas parado',t:'number'},{k:'custo',l:'Custo (R$)',t:'moeda'},{k:'responsavel',l:'Responsável / Oficina'},{k:'obs',l:'Observação',t:'textarea'}],
     cols:[col('Abertura',r=>dataBR(r.data)),col('Equipamento',r=>nomeEquip(r.equipId)),col('Tipo',r=>r.tipo),col('Defeito / serviço',r=>r.descricao),col('Status',r=>sitTag(r.status),{html:1}),
       col('Conclusão',r=>dataBR(r.conclusao)),col('Horas parado',r=>r.horasParado?num(r.horasParado):'',{n:1,tot:l=>num(soma(l,r=>r.horasParado))}),
       col('Custo',r=>r.custo?brl(r.custo):'',{n:1,tot:l=>brl(soma(l,r=>r.custo))}),col('Responsável',r=>r.responsavel)] },
@@ -465,6 +475,7 @@ function campoHTML(k, f){
     case 'number': return `<label>${rot}<input type="number" name="${f.k}" step="${f.step||'0.01'}" min="0"${req}></label>`;
     case 'date': return `<label>${rot}<input type="date" name="${f.k}"${req}></label>`;
     case 'time': return `<label>${rot}<input type="time" name="${f.k}"${req}></label>`;
+    case 'moeda': return `<label>${rot}<input type="text" inputmode="decimal" name="${f.k}" placeholder="0,00" data-moeda="1" autocomplete="off"${req}></label>`;
     case 'datetime': return `<label>${rot}<input type="datetime-local" name="${f.k}"${req}></label>`;
     default: return `<label>${rot}<input type="text" name="${f.k}"${req}></label>`;
   }
@@ -493,12 +504,14 @@ function prepararForm(k){
     f.querySelectorAll('[data-multi]').forEach(m=>{ o[m.dataset.multi] = [...m.querySelectorAll('input:checked')].map(i=>i.value); });
     E.campos.forEach(c=>{ if(c.se && !c.se(o)) delete o[c.k]; });
     const msg = E.validar?.(o); if(msg){ alert(msg); return; }
+    E.campos.filter(c=>c.t==='moeda').forEach(c=>{ if(o[c.k]!==undefined) o[c.k] = o[c.k]==='' ? '' : String(numBR(o[c.k])); });
     if(E.antesSalvar) o = E.antesSalvar(o);
     if(k!=='contratos' && !o.id) o.criadoPor = $('#usuarioEmail').textContent;
     try{ await gravar(k, o); }catch(err){ alert('Não foi possível salvar: '+(err.message||err)); return; }
     toast('Salvo!'); renderTudo();
   });
   if(E.extra){ const up=()=>$('#extra_'+k).textContent=E.extra(f); f.addEventListener('input',up); f.addEventListener('change',up); }
+  f.querySelectorAll('[data-moeda]').forEach(i=>i.addEventListener('blur', ()=>{ const n = numBR(i.value); if(n!=='') i.value = fmtBR(n); }));
   f.addEventListener('change', e=>{
     const op = e.target.closest('[data-opcoes]');
     if(op && e.target.checked) op.querySelectorAll('input').forEach(i=>{ if(i!==e.target) i.checked=false; });   // escolha única
@@ -533,7 +546,7 @@ function editarForm(k, id){
     const el = f.elements[c.k]; if(!el) return;
     const v = o[c.k] ?? '';
     if(el.tagName==='SELECT' && v && ![...el.options].some(op=>op.value===v)){ const op=document.createElement('option'); op.value=v; op.textContent=c.t==='ref'?(ENT[c.ent].titulo(L(c.ent).find(r=>r.id===v)||{codigo:v,nome:v,tipo:''})+' (inativo)'):v; el.appendChild(op); }
-    el.value = v;
+    el.value = c.t==='moeda' ? fmtBR(v) : v;
   });
   atualizarVisiveis(k);
   const h = f.closest('.card')?.querySelector('h2'); if(h) h.textContent = 'Editando: '+E.nome;
@@ -968,7 +981,7 @@ function telaCalendarioRH(){
       <b>${mesBR(mes)}</b><span class="info" style="margin:0">${esc(c.funcao||'')}${c.funcao?' · ':''}${temHorario(c) ? `Seg–Qui ${c.sqEntrada}–${c.sqSaida} (${hhmm(hSegQui(c))}) · Sex ${c.sxEntrada}–${c.sxSaida} (${hhmm(hSex(c))}) · ${hhmm(jSem(c))}/semana · sáb, dom e feriado = HE` : `jornada ${num(jDia(c))} h seg–sex · sábado ${num(jSab)} h · ${num(jSem(c))} h/semana · <b>cadastre o horário do colaborador</b>`}</span><span style="flex:1"></span>
       <button id="calUteis">Marcar dias úteis vazios como Presença (até hoje)</button><button class="pri" id="calSalvar">Salvar mês</button></div>
     <div class="valorbox"><b>💰 Valor financeiro de ${esc(c.nome)}</b>
-      <label>Salário mensal (R$) <input type="number" id="calSal" step="0.01" min="0" value="${sal?(+sal.toFixed(2)):''}" placeholder="Ex.: 2200,00"></label>
+      <label>Salário mensal (R$) <input type="text" inputmode="decimal" id="calSal" value="${sal?fmtBR(+sal.toFixed(2)):''}" placeholder="Ex.: 2.400,00" autocomplete="off"></label>
       <span class="info" style="margin:0;color:var(--ink)">Valor da hora: <b id="calVHtxt">—</b> (salário ÷ ${num(div,0)} h)<br>HE dias úteis/sábado +${num(pctHE(),0)}% · domingos e feriados +${num(pctHE100(),0)}%</span></div>
     <div class="kpis" id="calResumo"></div><div id="calValores"></div>
     <div class="tabela-wrap"><div class="cal">${DIAS_CURTOS.map(x=>`<div class="cab">${x}</div>`).join('')}${cel.join('')}</div></div>
@@ -983,7 +996,7 @@ function celulaCal(dv){
   return { P, A, AT, motivo:g('motivo').value, cid:g('cid').value.trim().toUpperCase(), ht:g('ht').value };
 }
 function resumoCal(){
-  const c = L('colaboradores').find(x=>x.id===est.calColab), sal = +($('#calSal')?.value) || 0, vh = sal / divisorHora(c);
+  const c = L('colaboradores').find(x=>x.id===est.calColab), sal = +numBR($('#calSal')?.value) || 0, vh = sal / divisorHora(c);
   const f50 = 1 + pctHE()/100, f100 = 1 + pctHE100()/100;
   $('#calVHtxt').textContent = vh ? brl(vh) : '—';
   let acH = 0, acHE = 0, acR = 0, h50 = 0, h100 = 0, hNao = 0, faltas = 0;
@@ -1012,7 +1025,8 @@ function resumoCal(){
     + kpi('Horas extras no mês', hhmm(acHE), `50%: ${hhmm(h50)} · 100%: ${hhmm(h100)}`);
   if(!sal){ $('#calValores').innerHTML = `<div class="card"><p style="margin:0">Informe o <b>salário mensal</b> no quadro verde acima para ver o cálculo financeiro (horas extras, DSR e descontos).</p></div>`; return; }
   const lin = (desc, ref, val, cls='') => `<tr class="${cls}"><td>${desc}</td><td class="num">${ref}</td><td class="num">${val}</td></tr>`;
-  $('#calValores').innerHTML = `<div class="card holerite"><div class="filtros"><h2 style="margin:0">Demonstrativo do mês (estimativa bruta)</h2><span style="flex:1"></span><span class="info" style="margin:0">Valor da hora ${brl(vh)} · dia ${brl(vDia)}</span></div>
+  const avisoSal = sal < 500 ? `<p class="alerta">⚠️ O salário está como <b>${brl(sal)}</b>, o que parece incorreto. Digite o valor completo no quadro verde (ex.: <b>2.400,00</b>) e clique em <b>Salvar mês</b>.</p>` : '';
+  $('#calValores').innerHTML = `<div class="card holerite"><div class="filtros"><h2 style="margin:0">Demonstrativo do mês (estimativa bruta)</h2><span style="flex:1"></span><span class="info" style="margin:0">Valor da hora ${brl(vh)} · dia ${brl(vDia)}</span></div>${avisoSal}
     <div class="tabela-wrap"><table><thead><tr><th>Descrição</th><th class="num">Referência</th><th class="num">Valor</th></tr></thead><tbody>
       ${lin('Salário base','30 dias',brl(sal))}
       ${lin(`Horas extras ${num(pctHE(),0)}% (dias úteis e sábados)`, hhmm(h50), brl(vHE50))}
@@ -1041,6 +1055,7 @@ function prepCalendarioRH(){
     dv.classList.add('mudou'); dv.dataset.mudou = '1'; freqAlterada = true; resumoCal();
   });
   $('#calSal').addEventListener('input', ()=>{ freqAlterada = true; resumoCal(); });
+  $('#calSal').addEventListener('blur', e=>{ const n = numBR(e.target.value); if(n!=='') e.target.value = fmtBR(n); });
   cal.addEventListener('input', e=>{ if(e.target.dataset.k!=='ht') return; const dv=e.target.closest('.d'); dv.classList.add('mudou'); dv.dataset.mudou='1'; freqAlterada=true; resumoCal(); });
   const trocar = id => { if(freqAlterada && !confirm('Há alterações não salvas neste calendário. Trocar sem salvar?')){ $('#calColab').value = est.calColab; return; } freqAlterada=false; est.calColab = id; renderTudo(); };
   $('#calColab').addEventListener('change', e=>trocar(e.target.value));
@@ -1068,7 +1083,7 @@ async function salvarCalendarioRH(){
     else Object.assign(o, { situacao:'Ausência', motivo:v.motivo, atestado:v.AT?'Sim':'Não', cid:v.AT?v.cid:'', dias:(ex && situacaoOc(ex).situacao==='Ausência' && ex.dias) || '1', tipo:v.AT?'Atestado':v.motivo });
     regs.push(o);
   });
-  const salNovo = $('#calSal').value, salMudou = salNovo!=='' && Math.abs(+salNovo - salarioBase(colab)) > 0.004;
+  const salNovo = numBR($('#calSal').value), salMudou = salNovo!=='' && Math.abs(+salNovo - salarioBase(colab)) > 0.004;
   const colabAlt = salMudou ? (({ valorHora, ...resto }) => ({ ...resto, salario:String(salNovo) }))(colab) : null;
   if(!regs.length && !apagar.length && !colabAlt){ toast('Nada para salvar.'); return; }
   carregando(true);
