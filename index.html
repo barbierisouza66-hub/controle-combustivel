@@ -141,12 +141,15 @@
   #telaLogin a{color:var(--pri);font-size:13px;cursor:pointer}
   .carregando{position:fixed;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,var(--pri),transparent);background-size:200% 100%;animation:car 1s linear infinite;z-index:60;display:none}
   .carregando.on{display:block}
+  #avisoVersao{position:sticky;top:0;z-index:80;background:#fdf0e7;color:var(--warn);border-bottom:1px solid #f2cfb6;padding:10px 20px;font-weight:600;display:flex;gap:12px;align-items:center;justify-content:center}
+  #avisoVersao button{background:var(--warn);color:#fff;border-color:var(--warn)}
   @keyframes car{from{background-position:100% 0}to{background-position:-100% 0}}
   @media print{header .acoes,nav,form,.linha-botoes,button,details{display:none!important}}
 </style>
 </head>
 <body>
 <div class="carregando" id="carregando"></div>
+<div id="avisoVersao" hidden>Há uma versão nova do sistema disponível. <button id="btnNovaVersao">Atualizar agora</button></div>
 
 <div id="telaLogin">
   <div class="card">
@@ -169,7 +172,7 @@
 </div>
 
 <header>
-  <h1 id="logo">SGC <small>Sistema de Gerenciamento de Contratos · versão 1.8</small></h1>
+  <h1 id="logo">SGC <small>Sistema de Gerenciamento de Contratos · versão <span id="versao"></span></small></h1>
   <div class="acoes">
     <span class="usuario" id="usuarioEmail"></span>
     <button id="btnContratos" hidden>← Contratos</button>
@@ -186,6 +189,21 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+/* ===================== VERSÃO ===================== */
+const VERSAO = '1.9';
+document.getElementById('versao').textContent = VERSAO;
+// Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
+async function checarVersao(){
+  try{
+    const t = await fetch(location.pathname + '?v=' + Date.now(), { cache:'no-store' }).then(r=>r.text());
+    const nova = (t.match(/const VERSAO = '([\d.]+)'/)||[])[1];
+    if(nova && nova !== VERSAO) document.getElementById('avisoVersao').hidden = false;
+  }catch(e){}
+}
+setInterval(checarVersao, 120000);
+window.addEventListener('focus', checarVersao);
+document.getElementById('btnNovaVersao').addEventListener('click', ()=>location.reload());
+
 /* ===================== SUPABASE ===================== */
 const SUPABASE_URL = 'https://xmxcdrtrdvxjkzfxbxsl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_n_SJIeAlMHqsSbU01hA-Rg_djL-Utos';
