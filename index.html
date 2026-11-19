@@ -55,6 +55,8 @@
   .cal .d label.chk{font-size:12.5px;gap:5px}
   .cal .d label.chk input{width:15px;height:15px}
   .cal .d select,.cal .d input[type=text],.cal .d input[type=number]{font-size:12px;padding:3px 5px;width:100%}
+  .cal .d .hecalc{font-size:11.5px;color:var(--muted);line-height:1.35}
+  .cal .d .hecalc .he{color:var(--warn)}
   input,select,textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
   input:focus,select:focus,textarea:focus{outline:2px solid var(--pri2);border-color:var(--pri)}
   button{font:inherit;cursor:pointer;padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:#fff;color:var(--ink)}
@@ -857,13 +859,13 @@ function telaCalendarioRH(){
   if(!colabs.length) return `<div class="card"><p style="margin:0">Cadastre os colaboradores em <b>Cadastros → Colaboradores</b> para usar o calendário.</p></div>` + lista;
   if(!colabs.some(c=>c.id===est.calColab)) est.calColab = colabs[0].id;
   const cid = est.calColab, mes = mesDaGrade(), [y,m] = mes.split('-').map(Number), nDias = new Date(y, m, 0).getDate();
-  const primeiro = new Date(y, m-1, 1).getDay();
+  const primeiro = new Date(y, m-1, 1).getDay(), colabAtual = colabs.find(x=>x.id===cid), jd = jDia(colabAtual);
   const cel = [];
   for(let i=0;i<primeiro;i++) cel.push('<div class="d fora"></div>');
   for(let dia=1; dia<=nDias; dia++){
     const d = `${mes}-${String(dia).padStart(2,'0')}`, dow = new Date(d+'T12:00:00').getDay(), rec = ocDoDia(cid, d), x = rec ? situacaoOc(rec) : {};
     const P = x.situacao==='Presença', A = x.situacao==='Ausência', AT = A && x.atestado==='Sim';
-    const motivo = x.motivo || 'Falta', he = rec ? (he50Oc(rec) || '') : '';
+    const motivo = x.motivo || 'Falta', ht = rec && P ? (rec.horasTrab || (he50Oc(rec) ? jd + he50Oc(rec) : '')) : '';
     cel.push(`<div class="d ${[0,6].includes(dow)?'fds':''} ${d===hoje()?'hoje':''} ${P?'st-P':AT?'st-AT':A?'st-A':''}" data-d="${d}">
       <div class="n">${dia} <small>${DIAS_CURTOS[dow]}</small></div>
       <label class="chk"><input type="checkbox" data-k="pres" ${P?'checked':''}> Presença</label>
@@ -871,31 +873,40 @@ function telaCalendarioRH(){
       <select data-k="motivo" ${A?'':'hidden'} title="Motivo da ausência">${MOTIVOS_AUS.map(o=>`<option ${o===motivo?'selected':''}>${esc(o)}</option>`).join('')}</select>
       <label class="chk" data-w="at" ${A?'':'hidden'}><input type="checkbox" data-k="atest" ${AT?'checked':''}> Atestado</label>
       <input type="text" data-k="cid" placeholder="CID" maxlength="10" value="${esc(rec?.cid||'')}" ${AT?'':'hidden'} style="text-transform:uppercase">
-      <input type="number" data-k="he" placeholder="Hora extra (h)" step="0.01" min="0" value="${esc(he)}" ${P?'':'hidden'}></div>`);
+      <input type="number" data-k="ht" placeholder="Horas trab. (${num(jd)})" title="Horas trabalhadas no dia. Vazio = jornada de ${num(jd)} h" step="0.25" min="0" max="24" value="${esc(ht)}" ${P?'':'hidden'}>
+      <div class="hecalc" data-o="acum"></div></div>`);
   }
   const c = colabs.find(x=>x.id===cid);
   return `<div class="card"><div class="filtros">
       <button id="calAnt" title="Colaborador anterior">◀</button>
       <select id="calColab" style="min-width:240px">${colabs.map(x=>`<option value="${x.id}" ${x.id===cid?'selected':''}>${esc(x.nome)}</option>`).join('')}</select>
       <button id="calProx" title="Próximo colaborador">▶</button>
-      <b>${mesBR(mes)}</b><span class="info" style="margin:0">${esc(c.funcao||'')}</span><span style="flex:1"></span>
+      <b>${mesBR(mes)}</b><span class="info" style="margin:0">${esc(c.funcao||'')}${c.funcao?' · ':''}jornada ${num(jDia(c))} h/dia</span><span style="flex:1"></span>
       <button id="calUteis">Marcar dias úteis vazios como Presença (até hoje)</button><button class="pri" id="calSalvar">Salvar mês</button></div>
     <div class="kpis" id="calResumo"></div>
     <div class="tabela-wrap"><div class="cal">${DIAS_CURTOS.map(x=>`<div class="cab">${x}</div>`).join('')}${cel.join('')}</div></div>
     <p class="info">Marque <b>Presença</b> ou <b>Ausência</b> em cada dia. Na ausência, escolha o motivo e marque <b>Atestado</b> se houver (aparece o campo do CID).
-      Na presença dá para informar hora extra. Depois clique em <b>Salvar mês</b>. Para dias, horas de atraso ou observações, use o lançamento detalhado abaixo.</p></div>` + lista;
+      Na presença, informe as <b>horas trabalhadas</b> no dia (vazio = jornada); o que passar da jornada vira hora extra e vai somando no mês. A jornada diária fica no cadastro do colaborador. Depois clique em <b>Salvar mês</b>. Para dias, horas de atraso ou observações, use o lançamento detalhado abaixo.</p></div>` + lista;
 }
 function celulaCal(dv){
   const g = k => dv.querySelector(`[data-k=${k}]`), P = g('pres').checked, A = g('aus').checked, AT = A && g('atest').checked;
-  g('motivo').hidden = !A; dv.querySelector('[data-w=at]').hidden = !A; g('cid').hidden = !AT; g('he').hidden = !P;
+  g('motivo').hidden = !A; dv.querySelector('[data-w=at]').hidden = !A; g('cid').hidden = !AT; g('ht').hidden = !P; dv.querySelector('[data-o=acum]').hidden = !P;
   dv.classList.remove('st-P','st-A','st-AT'); if(P) dv.classList.add('st-P'); else if(AT) dv.classList.add('st-AT'); else if(A) dv.classList.add('st-A');
-  return { P, A, AT, motivo:g('motivo').value, cid:g('cid').value.trim().toUpperCase(), he:g('he').value };
+  return { P, A, AT, motivo:g('motivo').value, cid:g('cid').value.trim().toUpperCase(), ht:g('ht').value };
 }
 function resumoCal(){
-  const vs = [...document.querySelectorAll('.cal .d[data-d]')].map(celulaCal);
-  const he = vs.reduce((s,v)=>s+(v.P?(+v.he||0):0),0);
+  const jd = jDia(L('colaboradores').find(x=>x.id===est.calColab));
+  let acH = 0, acHE = 0;
+  const vs = [...document.querySelectorAll('.cal .d[data-d]')].map(dv=>{   // dias em ordem: vai acumulando o mês
+    const v = celulaCal(dv), o = dv.querySelector('[data-o=acum]');
+    if(v.P){ const h = +v.ht || jd, he = Math.max(0, h - jd); acH += h; acHE += he;
+      o.innerHTML = `${he>0?`<b class="he">HE +${hhmm(he)}</b><br>`:''}Mês: ${hhmm(acH)}${acHE>0?` · HE ${hhmm(acHE)}`:''}`; }
+    else o.textContent = '';
+    return v;
+  });
   $('#calResumo').innerHTML = kpi('Presenças', vs.filter(v=>v.P).length) + kpi('Ausências', vs.filter(v=>v.A).length, vs.filter(v=>v.A&&!v.AT&&v.motivo==='Falta').length+' faltas sem atestado')
-    + kpi('Com atestado', vs.filter(v=>v.AT).length) + kpi('Horas extras', num(he)+' h');
+    + kpi('Com atestado', vs.filter(v=>v.AT).length) + kpi('Horas trabalhadas no mês', hhmm(acH), `jornada ${num(jd)} h/dia`)
+    + kpi('Horas extras no mês', hhmm(acHE), acHE ? 'soma do que passou da jornada' : 'nenhuma até agora');
 }
 function prepCalendarioRH(){
   freqAlterada = false;
@@ -909,6 +920,7 @@ function prepCalendarioRH(){
     if(k==='aus' && e.target.checked) dv.querySelector('[data-k=pres]').checked = false;
     dv.classList.add('mudou'); dv.dataset.mudou = '1'; freqAlterada = true; resumoCal();
   });
+  cal.addEventListener('input', e=>{ if(e.target.dataset.k!=='ht') return; const dv=e.target.closest('.d'); dv.classList.add('mudou'); dv.dataset.mudou='1'; freqAlterada=true; resumoCal(); });
   const trocar = id => { if(freqAlterada && !confirm('Há alterações não salvas neste calendário. Trocar sem salvar?')){ $('#calColab').value = est.calColab; return; } freqAlterada=false; est.calColab = id; renderTudo(); };
   $('#calColab').addEventListener('change', e=>trocar(e.target.value));
   const ops = [...$('#calColab').options].map(o=>o.value), pos = ops.indexOf(est.calColab);
@@ -928,8 +940,9 @@ async function salvarCalendarioRH(){
     const d = dv.dataset.d, v = celulaCal(dv), ex = ocDoDia(cid, d);
     if(!v.P && !v.A){ if(ex) apagar.push(ex.id); return; }
     const o = { ...(ex || { id:`oc_${cid}_${d}`, colabId:cid, data:d, obs:'', criadoPor:$('#usuarioEmail').textContent }) };
-    ['motivo','atestado','cid','he50','he100'].forEach(k=>delete o[k]);
-    if(v.P){ Object.assign(o, { situacao:'Presença', tipo:'Presença', he50:v.he }); delete o.dias; delete o.horas; }
+    ['motivo','atestado','cid','he50','he100','horasTrab'].forEach(k=>delete o[k]);
+    if(v.P){ const jd = jDia(L('colaboradores').find(x=>x.id===cid)), ht = +v.ht || jd;
+      Object.assign(o, { situacao:'Presença', tipo:'Presença', horasTrab:String(ht), he50:String(+Math.max(0, ht-jd).toFixed(2)) }); delete o.dias; delete o.horas; }
     else Object.assign(o, { situacao:'Ausência', motivo:v.motivo, atestado:v.AT?'Sim':'Não', cid:v.AT?v.cid:'', dias:(ex && situacaoOc(ex).situacao==='Ausência' && ex.dias) || '1', tipo:v.AT?'Atestado':v.motivo });
     regs.push(o);
   });
