@@ -58,6 +58,10 @@
   .cal .d .hecalc{font-size:11.5px;color:var(--muted);line-height:1.35}
   .cal .d .hecalc .he{color:var(--warn)}
   .cal .d .hecalc .rs{color:var(--pri)}
+  .valorbox{display:flex;gap:18px;align-items:center;flex-wrap:wrap;background:var(--pri2);border:1px solid #b9dcc9;border-radius:10px;padding:12px 16px;margin-bottom:14px}
+  .valorbox b{font-size:15px;color:var(--pri)}
+  .valorbox label{flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:14px;font-weight:600}
+  .valorbox input{width:130px;font-size:16px;font-weight:600}
   input,select,textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
   input:focus,select:focus,textarea:focus{outline:2px solid var(--pri2);border-color:var(--pri)}
   button{font:inherit;cursor:pointer;padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:#fff;color:var(--ink)}
@@ -159,7 +163,7 @@
 </div>
 
 <header>
-  <h1 id="logo">SGC <small>Sistema de Gerenciamento de Contratos</small></h1>
+  <h1 id="logo">SGC <small>Sistema de Gerenciamento de Contratos · versão 1.6</small></h1>
   <div class="acoes">
     <span class="usuario" id="usuarioEmail"></span>
     <button id="btnContratos" hidden>← Contratos</button>
@@ -885,9 +889,10 @@ function telaCalendarioRH(){
       <select id="calColab" style="min-width:240px">${colabs.map(x=>`<option value="${x.id}" ${x.id===cid?'selected':''}>${esc(x.nome)}</option>`).join('')}</select>
       <button id="calProx" title="Próximo colaborador">▶</button>
       <b>${mesBR(mes)}</b><span class="info" style="margin:0">${esc(c.funcao||'')}${c.funcao?' · ':''}jornada ${num(jDia(c))} h/dia</span><span style="flex:1"></span>
-      <label style="flex-direction:row;align-items:center;gap:6px">Valor da hora R$ <input type="number" id="calVH" step="0.01" min="0" style="width:100px" value="${vHora(c)?(+vHora(c).toFixed(2)):''}" placeholder="0,00" title="Também pode ser calculado pelo salário no cadastro do colaborador"></label>
-      <span class="info" style="margin:0">HE +${num(pctHE(),0)}%</span>
       <button id="calUteis">Marcar dias úteis vazios como Presença (até hoje)</button><button class="pri" id="calSalvar">Salvar mês</button></div>
+    <div class="valorbox"><b>💰 Valor financeiro de ${esc(c.nome)}</b>
+      <label>Valor da hora (R$) <input type="number" id="calVH" step="0.01" min="0" value="${vHora(c)?(+vHora(c).toFixed(2)):''}" placeholder="Ex.: 10,00"></label>
+      <span class="info" style="margin:0">Hora extra = valor da hora + ${num(pctHE(),0)}% (ajustável no cadastro do contrato).<br>Também dá para informar o <b>salário mensal</b> no cadastro do colaborador: o sistema divide por ${num(jSem(c)*5,0)} h.</span></div>
     <div class="kpis" id="calResumo"></div><div class="kpis" id="calValores"></div>
     <div class="tabela-wrap"><div class="cal">${DIAS_CURTOS.map(x=>`<div class="cab">${x}</div>`).join('')}${cel.join('')}</div></div>
     <p class="info">Marque <b>Presença</b> ou <b>Ausência</b> em cada dia. Na ausência, escolha o motivo e marque <b>Atestado</b> se houver (aparece o campo do CID).
