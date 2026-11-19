@@ -36,6 +36,25 @@
   .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:18px}
   label{display:flex;flex-direction:column;font-size:13px;color:var(--muted);gap:4px}
   label.largo{margin-top:12px}
+  .lbl{display:flex;flex-direction:column;font-size:13px;color:var(--muted);gap:4px}
+  .opcoes{display:flex;gap:16px;flex-wrap:wrap;padding:7px 0}
+  label.chk{flex-direction:row;align-items:center;gap:7px;color:var(--ink);font-size:14px;cursor:pointer}
+  label.chk input{width:18px;height:18px;margin:0;accent-color:var(--pri);cursor:pointer}
+  .cal{display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:6px}
+  .cal .cab{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;text-align:center;padding:4px}
+  .cal .d{border:1px solid var(--line);border-radius:8px;padding:7px 8px;background:#fff;min-height:118px;display:flex;flex-direction:column;gap:3px}
+  .cal .d.fora{background:transparent;border:none}
+  .cal .d.fds{background:#f6f7f6}
+  .cal .d.hoje{border-color:var(--pri);box-shadow:inset 0 0 0 1px var(--pri)}
+  .cal .d.st-P{background:#eef7f2}
+  .cal .d.st-A{background:#fdf3f2}
+  .cal .d.st-AT{background:#fdf5ee}
+  .cal .d.mudou{box-shadow:inset 3px 0 0 var(--warn)}
+  .cal .d .n{font-weight:600;font-size:14px;display:flex;justify-content:space-between}
+  .cal .d .n small{font-weight:400;color:var(--muted)}
+  .cal .d label.chk{font-size:12.5px;gap:5px}
+  .cal .d label.chk input{width:15px;height:15px}
+  .cal .d select,.cal .d input[type=text],.cal .d input[type=number]{font-size:12px;padding:3px 5px;width:100%}
   input,select,textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
   input:focus,select:focus,textarea:focus{outline:2px solid var(--pri2);border-color:var(--pri)}
   button{font:inherit;cursor:pointer;padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:#fff;color:var(--ink)}
@@ -192,7 +211,8 @@ const OPT_COMB = ['Gasolina','Mistura 2T','Diesel S10','Diesel S500','Etanol','E
 const TIPOS_EQ = ['Roçadeira Costal','Trator','Prensa','Empilhadeira','Caminhão','Veículo leve','Gerador','Outro'];
 const SIT_EQ = ['Operando','Em manutenção','Parado','Inativo'];
 const TIPOS_OC = ['Falta','Falta justificada','Atestado','Atraso / saída antecipada','Hora extra 50%','Hora extra 100%','Férias','Afastamento','Folga / banco de horas'];
-const AUSENCIAS = ['Falta','Falta justificada','Atestado','Atraso / saída antecipada'];
+const AUSENCIAS = ['Falta','Falta justificada','Atestado','Atraso / saída antecipada','Doença','Acidente de trabalho','Outro'];
+const MOTIVOS_AUS = ['Falta','Falta justificada','Atraso / saída antecipada','Doença','Acidente de trabalho','Afastamento','Férias','Folga / banco de horas','Outro'];
 const FUNCOES_PADRAO = ['Operador de máquina fixa','Ajudante geral','Operador de empilhadeira','Motorista','Auxiliar administrativo','Operador de roçadeira','Motorista de trator','Prensista','Encarregado'];
 const MATERIAIS_PADRAO = ['Papelão','Plástico','Filme stretch','Big bag','Papel misto','Sucata metálica','Outro'];
 const TURNOS = ['1º turno','2º turno','3º turno','Administrativo'];
@@ -243,11 +263,24 @@ const ENT = {
     cols:[col('Função',r=>r.funcao),col('Previsto',r=>num(r.previsto,0),{n:1,tot:l=>num(soma(l,r=>r.previsto),0)}),col('Ativos hoje',r=>num(L('colaboradores').filter(c=>ativoColab(c)&&c.funcao===r.funcao).length,0),{n:1}),col('Observação',r=>r.obs)] },
 
   ocorrencias: { nome:'ocorrência', data:'data', campos:[
-      {k:'data',l:'Data',t:'date',req:1},{k:'colabId',l:'Colaborador',t:'ref',ent:'colaboradores',filtro:ativoColab,req:1},{k:'tipo',l:'Tipo',t:'select',op:TIPOS_OC,req:1},
-      {k:'dias',l:'Dias',t:'number',step:'0.5'},{k:'horas',l:'Horas',t:'number',step:'0.01'},{k:'obs',l:'Observação',t:'textarea'}],
-    validar:o=>(+o.dias||+o.horas)?'':'Informe os dias ou as horas da ocorrência.',
-    cols:[col('Data',r=>dataBR(r.data)),col('Colaborador',r=>nomeColab(r.colabId)),col('Tipo',r=>tag(r.tipo, r.tipo.startsWith('Hora extra')?'w':AUSENCIAS.includes(r.tipo)?'d':'n'),{html:1}),
-      col('Dias',r=>r.dias?num(r.dias,1):'',{n:1,tot:l=>num(soma(l,r=>r.dias),1)}),col('Horas',r=>r.horas?num(r.horas):'',{n:1,tot:l=>num(soma(l,r=>r.horas))}),col('Observação',r=>r.obs)] },
+      {k:'data',l:'Data',t:'date',req:1},{k:'colabId',l:'Colaborador',t:'ref',ent:'colaboradores',filtro:ativoColab,req:1},
+      {k:'situacao',l:'Situação',t:'opcoes',op:[['Presença','Presença (trabalhou normalmente)'],['Ausência','Ausência']]},
+      {k:'motivo',l:'Motivo da ausência',t:'select',vazio:1,op:MOTIVOS_AUS,se:o=>o.situacao==='Ausência'},
+      {k:'atestado',l:'Atestado?',t:'opcoes',op:['Sim','Não'],se:o=>o.situacao==='Ausência'},
+      {k:'cid',l:'CID',se:o=>o.situacao==='Ausência'&&o.atestado==='Sim'},
+      {k:'dias',l:'Dias de ausência / atestado',t:'number',step:'0.5',se:o=>o.situacao==='Ausência'},
+      {k:'horas',l:'Horas de ausência (atraso, saída)',t:'number',step:'0.01',se:o=>o.situacao==='Ausência'},
+      {k:'he50',l:'Horas extras 50%',t:'number',step:'0.01',se:o=>o.situacao==='Presença'},
+      {k:'he100',l:'Horas extras 100%',t:'number',step:'0.01',se:o=>o.situacao==='Presença'},
+      {k:'obs',l:'Observação',t:'textarea'}],
+    validar:o=>!o.situacao?'Marque Presença ou Ausência.':o.situacao==='Ausência'&&!o.motivo?'Escolha o motivo da ausência.':o.situacao==='Ausência'&&!o.atestado?'Marque se tem atestado (Sim ou Não).':o.situacao==='Ausência'&&!(+o.dias||+o.horas)?'Informe os dias ou as horas de ausência.':'',
+    antesSalvar:o=>{ o.cid = (o.cid||'').trim().toUpperCase(); o.tipo = o.situacao==='Presença' ? 'Presença' : (o.atestado==='Sim' ? 'Atestado' : o.motivo); return o; },
+    paraForm:r=>situacaoOc(r),
+    aoMudar:(f,o)=>{ if(o.situacao==='Ausência' && !f.elements.dias.value && !f.elements.horas.value) f.elements.dias.value='1'; },
+    cols:[col('Data',r=>dataBR(r.data)),col('Colaborador',r=>nomeColab(r.colabId)),col('Situação',r=>{ const x=situacaoOc(r); return tag(x.situacao, x.situacao==='Presença'?'':'d'); },{html:1}),
+      col('Motivo',r=>situacaoOc(r).motivo||''),col('Atestado',r=>situacaoOc(r).atestado||''),col('CID',r=>r.cid||''),
+      col('Dias',r=>r.dias?num(r.dias,1):'',{n:1,tot:l=>num(soma(l,r=>r.dias),1)}),col('Horas aus.',r=>situacaoOc(r).situacao==='Ausência'&&r.horas?num(r.horas):'',{n:1}),
+      col('H. extra',r=>{ const h=heOc(r); return h?num(h):''; },{n:1,tot:l=>num(soma(l,heOc))}),col('Observação',r=>r.obs)] },
 
   abastecimentos: { nome:'abastecimento', data:'data', campos:[
       {k:'data',l:'Data',t:'date',req:1},{k:'equipId',l:'Equipamento',t:'ref',ent:'equipamentos',filtro:ativoEquip,req:1},{k:'colabId',l:'Operador / Motorista',t:'ref',ent:'colaboradores',filtro:ativoColab,req:1},
@@ -296,13 +329,24 @@ const ENT = {
       col('Operador',r=>r.colabId?nomeColab(r.colabId):'')] },
 };
 ENT.frequencia = { nome:'frequência', data:'data', campos:[], cols:[] };
+// Ocorrências antigas tinham só "tipo": aqui viram situação/motivo/atestado.
+function situacaoOc(r){
+  if(r.situacao) return { situacao:r.situacao, motivo:r.motivo||'', atestado:r.atestado||'' };
+  const t = r.tipo||'';
+  if(t==='Presença') return { situacao:'Presença', motivo:'', atestado:'' };
+  if(t.startsWith('Hora extra')) return { situacao:'Presença', motivo:'', atestado:'', he50: t==='Hora extra 50%'?r.horas:'', he100: t==='Hora extra 100%'?r.horas:'', horas:'' };
+  return { situacao:'Ausência', motivo: t==='Atestado'?'Doença':t, atestado: t==='Atestado'?'Sim':'Não' };
+}
+const he50Oc = r => (+r.he50||0) + (r.tipo==='Hora extra 50%' ? (+r.horas||0) : 0);
+const he100Oc = r => (+r.he100||0) + (r.tipo==='Hora extra 100%' ? (+r.horas||0) : 0);
+const heOc = r => he50Oc(r) + he100Oc(r);
 const COLECOES_CONTRATO = ['colaboradores','equipamentos','quadro','ocorrencias','abastecimentos','nylon','ordens','manutencoes','fardos','frequencia'];
 
 /* ===================== MÓDULOS E ABAS ===================== */
 const MODULOS = [
   { id:'geral', nome:'Visão geral', abas:[ {nome:'Resumo do mês', painel:()=>painelGeral()} ] },
   { id:'combustivel', nome:'Combustível', abas:[ {nome:'Painel', painel:()=>painelCombustivel()}, {nome:'Abastecimento', ent:'abastecimentos'}, {nome:'Nylon e Faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'RH – Frequência', painel:()=>telaFrequencia(), depois:()=>prepFrequencia()}, {nome:'RH – Resumo do mês', painel:()=>painelFrequencia()} ] },
-  { id:'rh', nome:'RH', abas:[ {nome:'Painel', painel:()=>painelRH()}, {nome:'Ocorrências (faltas, HE, atestados)', ent:'ocorrencias'}, {nome:'Quadro previsto', ent:'quadro'} ] },
+  { id:'rh', nome:'RH', abas:[ {nome:'Painel', painel:()=>painelRH()}, {nome:'Ocorrências – calendário do mês', painel:()=>telaCalendarioRH(), depois:()=>prepCalendarioRH()}, {nome:'Quadro previsto', ent:'quadro'} ] },
   { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', ent:'manutencoes'} ] },
   { id:'fardos', nome:'Produção de Fardos', abas:[ {nome:'Painel', painel:()=>painelFardos()}, {nome:'Lançar produção', ent:'fardos'} ] },
   { id:'cadastros', nome:'Cadastros', abas:[ {nome:'Colaboradores', ent:'colaboradores'}, {nome:'Equipamentos', ent:'equipamentos'} ] },
@@ -376,7 +420,8 @@ function campoHTML(k, f){
       return `<label class="largo">${rot}<div class="checks" data-multi="${f.k}">${ops.map(([v,t])=>`<label><input type="checkbox" value="${esc(v)}"> ${esc(t)}</label>`).join('') || '<span class="info" style="margin:0">Nenhum cadastro ativo.</span>'}</div></label>`;
     }
     case 'textarea': return `<label class="largo">${rot}<textarea name="${f.k}" rows="2"></textarea></label>`;
-    case 'select': return `<label>${rot}<select name="${f.k}"${req}>${f.op.map(o=>`<option>${esc(o)}</option>`).join('')}</select></label>`;
+    case 'select': return `<label>${rot}<select name="${f.k}"${req}>${f.vazio?'<option value="">Selecione…</option>':''}${f.op.map(o=>`<option>${esc(o)}</option>`).join('')}</select></label>`;
+    case 'opcoes': return `<div class="lbl">${rot}<div class="opcoes" data-opcoes="${f.k}">${f.op.map(o=>{ const [v,t]=Array.isArray(o)?o:[o,o]; return `<label class="chk"><input type="checkbox" name="${f.k}" value="${esc(v)}"> ${esc(t)}</label>`; }).join('')}</div></div>`;
     case 'ref': {
       const ops = opcoesRef(f);
       return `<label>${rot}<select name="${f.k}"${req}><option value="">${ops.length?'Selecione…':'Nada cadastrado em Cadastros'}</option>${ops.map(([v,t])=>`<option value="${esc(v)}">${esc(t)}</option>`).join('')}</select></label>`;
@@ -388,11 +433,18 @@ function campoHTML(k, f){
     default: return `<label>${rot}<input type="text" name="${f.k}"${req}></label>`;
   }
 }
+function campoComMarca(k, f){ return campoHTML(k, f).replace(/^<(label|div)/, `<$1 data-campo="${f.k}"`); }
+function valoresForm(f){ return Object.fromEntries(new FormData(f).entries()); }
+function atualizarVisiveis(k){
+  const f = $('#form_'+k), E = ENT[k]; if(!f) return;
+  const o = valoresForm(f);
+  E.campos.forEach(c=>{ if(!c.se) return; const w = f.querySelector(`[data-campo="${c.k}"]`); if(w) w.hidden = !c.se(o); });
+}
 function formHTML(k){
   const E = ENT[k], largos = f => ['multi','textarea'].includes(f.t);
   return `<form id="form_${k}" data-ent="${k}"><input type="hidden" name="id">
-    <div class="grid">${E.campos.filter(f=>!largos(f)).map(f=>campoHTML(k,f)).join('')}</div>
-    ${E.campos.filter(largos).map(f=>campoHTML(k,f)).join('')}
+    <div class="grid">${E.campos.filter(f=>!largos(f)).map(f=>campoComMarca(k,f)).join('')}</div>
+    ${E.campos.filter(largos).map(f=>campoComMarca(k,f)).join('')}
     ${E.extra?`<div class="info" id="extra_${k}"></div>`:''}
     <div class="linha-botoes"><button class="pri" type="submit">Salvar</button><button type="button" data-limpar="${k}">Limpar / novo</button></div></form>`;
 }
@@ -401,14 +453,21 @@ function prepararForm(k){
   const E = ENT[k];
   f.addEventListener('submit', async e=>{
     e.preventDefault();
-    const o = Object.fromEntries(new FormData(f).entries());
+    let o = valoresForm(f);
     f.querySelectorAll('[data-multi]').forEach(m=>{ o[m.dataset.multi] = [...m.querySelectorAll('input:checked')].map(i=>i.value); });
+    E.campos.forEach(c=>{ if(c.se && !c.se(o)) delete o[c.k]; });
     const msg = E.validar?.(o); if(msg){ alert(msg); return; }
+    if(E.antesSalvar) o = E.antesSalvar(o);
     if(k!=='contratos' && !o.id) o.criadoPor = $('#usuarioEmail').textContent;
     try{ await gravar(k, o); }catch(err){ alert('Não foi possível salvar: '+(err.message||err)); return; }
     toast('Salvo!'); renderTudo();
   });
   if(E.extra){ const up=()=>$('#extra_'+k).textContent=E.extra(f); f.addEventListener('input',up); f.addEventListener('change',up); }
+  f.addEventListener('change', e=>{
+    const op = e.target.closest('[data-opcoes]');
+    if(op && e.target.checked) op.querySelectorAll('input').forEach(i=>{ if(i!==e.target) i.checked=false; });   // escolha única
+    atualizarVisiveis(k); E.aoMudar?.(f, valoresForm(f));
+  });
   if(k==='ordens') f.querySelector('[data-multi="colabs"]').addEventListener('change',()=>{ const n=f.querySelectorAll('[data-multi="colabs"] input:checked').length; if(n){ f.qtdColab.value=n; $('#extra_ordens').textContent=E.extra(f);} });
   if(k==='abastecimentos') f.equipId.addEventListener('change',()=>{ const e=equip(f.equipId.value); if(e?.combustivel) f.combustivel.value=e.combustivel; });
   limparForm(k);
@@ -424,20 +483,23 @@ function limparForm(k){
   });
   const h = f.closest('.card')?.querySelector('h2'); if(h) h.textContent = 'Novo: '+E.nome;
   if(E.extra) $('#extra_'+k).textContent = E.extra(f);
+  atualizarVisiveis(k);
 }
 function editarForm(k, id){
-  const lista = k==='contratos' ? contratos : L(k), o = lista.find(x=>x.id===id); if(!o) return;
+  const lista = k==='contratos' ? contratos : L(k), bruto = lista.find(x=>x.id===id); if(!bruto) return;
   if(k==='contratos') $('#novoContrato').open = true;
-  const f = $('#form_'+k), E = ENT[k];
+  const f = $('#form_'+k), E = ENT[k], o = E.paraForm ? { ...bruto, ...E.paraForm(bruto) } : bruto;
   limparForm(k);
   f.elements.id.value = o.id;
   E.campos.forEach(c=>{
     if(c.t==='multi'){ f.querySelectorAll(`[data-multi="${c.k}"] input`).forEach(i=>i.checked=(o[c.k]||[]).includes(i.value)); return; }
+    if(c.t==='opcoes'){ f.querySelectorAll(`[data-opcoes="${c.k}"] input`).forEach(i=>i.checked=i.value===o[c.k]); return; }
     const el = f.elements[c.k]; if(!el) return;
     const v = o[c.k] ?? '';
     if(el.tagName==='SELECT' && v && ![...el.options].some(op=>op.value===v)){ const op=document.createElement('option'); op.value=v; op.textContent=c.t==='ref'?(ENT[c.ent].titulo(L(c.ent).find(r=>r.id===v)||{codigo:v,nome:v,tipo:''})+' (inativo)'):v; el.appendChild(op); }
     el.value = v;
   });
+  atualizarVisiveis(k);
   const h = f.closest('.card')?.querySelector('h2'); if(h) h.textContent = 'Editando: '+E.nome;
   if(E.extra) $('#extra_'+k).textContent = E.extra(f);
   f.scrollIntoView({behavior:'smooth', block:'start'});
@@ -482,11 +544,11 @@ function painelCombustivel(){
 function resumoRH(){
   const ativos = L('colaboradores').filter(ativoColab), previsto = soma(L('quadro'),q=>q.previsto);
   const oc = doMes(L('ocorrencias'),'data'), j = jornada();
-  const horasOc = r => (+r.dias||0)*j + (+r.horas||0);
+  const horasOc = r => r.situacao==='Presença' ? 0 : (+r.dias||0)*j + (+r.horas||0);
   const aus = oc.filter(o=>AUSENCIAS.includes(o.tipo)), ausH = soma(aus,horasOc);
   const horasPrev = ativos.length*diasUteis()*j;
   const abs = est.mes && horasPrev ? ausH/horasPrev*100 : null;
-  const he50 = soma(oc.filter(o=>o.tipo==='Hora extra 50%'),horasOc), he100 = soma(oc.filter(o=>o.tipo==='Hora extra 100%'),horasOc);
+  const he50 = soma(oc, he50Oc), he100 = soma(oc, he100Oc);
   const vagas = [...new Set(L('quadro').map(q=>q.funcao))].reduce((n,fn)=>n+Math.max(0, soma(L('quadro').filter(q=>q.funcao===fn),q=>q.previsto) - ativos.filter(c=>c.funcao===fn).length),0);
   return { ativos, previsto, vagas, oc, ausH, abs, he50, he100, horasOc, faltas: soma(oc.filter(o=>o.tipo==='Falta'),r=>r.dias) };
 }
@@ -497,7 +559,7 @@ function painelRH(){
     return `<tr><td>${esc(fn)}</td><td class="num">${num(p,0)}</td><td class="num">${num(a,0)}</td><td class="num">${d===0?tag('completo'):d<0?tag(d,'d'):tag('+'+d,'w')}</td></tr>`; });
   const porColab = {};
   r.oc.forEach(o=>{ const p=porColab[o.colabId]=porColab[o.colabId]||{aus:0,faltas:0,he:0}; const h=r.horasOc(o);
-    if(AUSENCIAS.includes(o.tipo)) p.aus+=h; if(o.tipo==='Falta') p.faltas+=(+o.dias||0); if(o.tipo.startsWith('Hora extra')) p.he+=h; });
+    if(AUSENCIAS.includes(o.tipo)) p.aus+=h; if(o.tipo==='Falta') p.faltas+=(+o.dias||0); p.he += heOc(o); });
   const linhasC = Object.entries(porColab).sort((a,b)=>(b[1].aus+b[1].he)-(a[1].aus+a[1].he)).map(([id,p])=>`<tr><td>${esc(nomeColab(id))}</td><td class="num">${num(p.faltas,1)}</td><td class="num">${num(p.aus)}</td><td class="num">${num(p.he)}</td></tr>`);
   return `<div class="kpis">${kpi('Efetivo ativo', r.ativos.length, 'previsto: '+num(r.previsto,0))}${kpi('Vagas em aberto', r.vagas, 'funções abaixo do previsto')}
     ${kpi('Absenteísmo', r.abs===null?'—':num(r.abs,1)+'%', r.abs===null?'escolha um mês':num(r.ausH)+' h de ausência')}${kpi('Faltas', num(r.faltas,1)+' dias')}
@@ -784,6 +846,104 @@ function exportarTabelaCSV(id){
   baixar(`${id}_${(contrato?.nome||'').replace(/[^\w]+/g,'_')}_${est.mes||'todos'}.csv`, '\ufeff'+csv, 'text/csv;charset=utf-8');
 }
 
+/* ---------- RH: ocorrências em formato de calendário (um colaborador por vez) ---------- */
+const DIAS_CURTOS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+function ocDoDia(colabId, d){ return L('ocorrencias').find(r=>r.colabId===colabId && r.data===d && r.id===`oc_${colabId}_${d}`) || L('ocorrencias').find(r=>r.colabId===colabId && r.data===d); }
+function telaCalendarioRH(){
+  const colabs = L('colaboradores').filter(ativoColab).sort(ENT.colaboradores.ordem);
+  const lista = `<div class="card"><h2>Novo: ocorrência (lançamento detalhado)</h2>${formHTML('ocorrencias')}</div>
+    <div class="card"><div class="filtros"><span class="info" style="margin:0">${est.mes?'Ocorrências de '+mesBR(est.mes):'Todas as ocorrências'}</span><span style="flex:1"></span><button data-csv="ocorrencias">Exportar CSV</button></div>
+    <div class="tabela-wrap">${tabelaEnt('ocorrencias')}</div></div>`;
+  if(!colabs.length) return `<div class="card"><p style="margin:0">Cadastre os colaboradores em <b>Cadastros → Colaboradores</b> para usar o calendário.</p></div>` + lista;
+  if(!colabs.some(c=>c.id===est.calColab)) est.calColab = colabs[0].id;
+  const cid = est.calColab, mes = mesDaGrade(), [y,m] = mes.split('-').map(Number), nDias = new Date(y, m, 0).getDate();
+  const primeiro = new Date(y, m-1, 1).getDay();
+  const cel = [];
+  for(let i=0;i<primeiro;i++) cel.push('<div class="d fora"></div>');
+  for(let dia=1; dia<=nDias; dia++){
+    const d = `${mes}-${String(dia).padStart(2,'0')}`, dow = new Date(d+'T12:00:00').getDay(), rec = ocDoDia(cid, d), x = rec ? situacaoOc(rec) : {};
+    const P = x.situacao==='Presença', A = x.situacao==='Ausência', AT = A && x.atestado==='Sim';
+    const motivo = x.motivo || 'Falta', he = rec ? (he50Oc(rec) || '') : '';
+    cel.push(`<div class="d ${[0,6].includes(dow)?'fds':''} ${d===hoje()?'hoje':''} ${P?'st-P':AT?'st-AT':A?'st-A':''}" data-d="${d}">
+      <div class="n">${dia} <small>${DIAS_CURTOS[dow]}</small></div>
+      <label class="chk"><input type="checkbox" data-k="pres" ${P?'checked':''}> Presença</label>
+      <label class="chk"><input type="checkbox" data-k="aus" ${A?'checked':''}> Ausência</label>
+      <select data-k="motivo" ${A?'':'hidden'} title="Motivo da ausência">${MOTIVOS_AUS.map(o=>`<option ${o===motivo?'selected':''}>${esc(o)}</option>`).join('')}</select>
+      <label class="chk" data-w="at" ${A?'':'hidden'}><input type="checkbox" data-k="atest" ${AT?'checked':''}> Atestado</label>
+      <input type="text" data-k="cid" placeholder="CID" maxlength="10" value="${esc(rec?.cid||'')}" ${AT?'':'hidden'} style="text-transform:uppercase">
+      <input type="number" data-k="he" placeholder="Hora extra (h)" step="0.01" min="0" value="${esc(he)}" ${P?'':'hidden'}></div>`);
+  }
+  const c = colabs.find(x=>x.id===cid);
+  return `<div class="card"><div class="filtros">
+      <button id="calAnt" title="Colaborador anterior">◀</button>
+      <select id="calColab" style="min-width:240px">${colabs.map(x=>`<option value="${x.id}" ${x.id===cid?'selected':''}>${esc(x.nome)}</option>`).join('')}</select>
+      <button id="calProx" title="Próximo colaborador">▶</button>
+      <b>${mesBR(mes)}</b><span class="info" style="margin:0">${esc(c.funcao||'')}</span><span style="flex:1"></span>
+      <button id="calUteis">Marcar dias úteis vazios como Presença (até hoje)</button><button class="pri" id="calSalvar">Salvar mês</button></div>
+    <div class="kpis" id="calResumo"></div>
+    <div class="tabela-wrap"><div class="cal">${DIAS_CURTOS.map(x=>`<div class="cab">${x}</div>`).join('')}${cel.join('')}</div></div>
+    <p class="info">Marque <b>Presença</b> ou <b>Ausência</b> em cada dia. Na ausência, escolha o motivo e marque <b>Atestado</b> se houver (aparece o campo do CID).
+      Na presença dá para informar hora extra. Depois clique em <b>Salvar mês</b>. Para dias, horas de atraso ou observações, use o lançamento detalhado abaixo.</p></div>` + lista;
+}
+function celulaCal(dv){
+  const g = k => dv.querySelector(`[data-k=${k}]`), P = g('pres').checked, A = g('aus').checked, AT = A && g('atest').checked;
+  g('motivo').hidden = !A; dv.querySelector('[data-w=at]').hidden = !A; g('cid').hidden = !AT; g('he').hidden = !P;
+  dv.classList.remove('st-P','st-A','st-AT'); if(P) dv.classList.add('st-P'); else if(AT) dv.classList.add('st-AT'); else if(A) dv.classList.add('st-A');
+  return { P, A, AT, motivo:g('motivo').value, cid:g('cid').value.trim().toUpperCase(), he:g('he').value };
+}
+function resumoCal(){
+  const vs = [...document.querySelectorAll('.cal .d[data-d]')].map(celulaCal);
+  const he = vs.reduce((s,v)=>s+(v.P?(+v.he||0):0),0);
+  $('#calResumo').innerHTML = kpi('Presenças', vs.filter(v=>v.P).length) + kpi('Ausências', vs.filter(v=>v.A).length, vs.filter(v=>v.A&&!v.AT&&v.motivo==='Falta').length+' faltas sem atestado')
+    + kpi('Com atestado', vs.filter(v=>v.AT).length) + kpi('Horas extras', num(he)+' h');
+}
+function prepCalendarioRH(){
+  freqAlterada = false;
+  prepararForm('ocorrencias');
+  const cal = document.querySelector('.cal'); if(!cal) return;
+  resumoCal();
+  cal.addEventListener('change', e=>{
+    const dv = e.target.closest('.d'); if(!dv) return;
+    const k = e.target.dataset.k;
+    if(k==='pres' && e.target.checked) dv.querySelector('[data-k=aus]').checked = false;   // presença e ausência se excluem
+    if(k==='aus' && e.target.checked) dv.querySelector('[data-k=pres]').checked = false;
+    dv.classList.add('mudou'); dv.dataset.mudou = '1'; freqAlterada = true; resumoCal();
+  });
+  const trocar = id => { if(freqAlterada && !confirm('Há alterações não salvas neste calendário. Trocar sem salvar?')){ $('#calColab').value = est.calColab; return; } freqAlterada=false; est.calColab = id; renderTudo(); };
+  $('#calColab').addEventListener('change', e=>trocar(e.target.value));
+  const ops = [...$('#calColab').options].map(o=>o.value), pos = ops.indexOf(est.calColab);
+  $('#calAnt').addEventListener('click', ()=>trocar(ops[(pos-1+ops.length)%ops.length]));
+  $('#calProx').addEventListener('click', ()=>trocar(ops[(pos+1)%ops.length]));
+  $('#calUteis').addEventListener('click', ()=>{
+    cal.querySelectorAll('.d[data-d]').forEach(dv=>{ const d=dv.dataset.d, dow=new Date(d+'T12:00:00').getDay();
+      if(d<=hoje() && ![0,6].includes(dow) && !dv.querySelector('[data-k=pres]').checked && !dv.querySelector('[data-k=aus]').checked){
+        dv.querySelector('[data-k=pres]').checked = true; dv.classList.add('mudou'); dv.dataset.mudou='1'; freqAlterada = true; } });
+    resumoCal();
+  });
+  $('#calSalvar').addEventListener('click', salvarCalendarioRH);
+}
+async function salvarCalendarioRH(){
+  const cid = est.calColab, regs = [], apagar = [];
+  document.querySelectorAll('.cal .d[data-mudou]').forEach(dv=>{
+    const d = dv.dataset.d, v = celulaCal(dv), ex = ocDoDia(cid, d);
+    if(!v.P && !v.A){ if(ex) apagar.push(ex.id); return; }
+    const o = { ...(ex || { id:`oc_${cid}_${d}`, colabId:cid, data:d, obs:'', criadoPor:$('#usuarioEmail').textContent }) };
+    ['motivo','atestado','cid','he50','he100'].forEach(k=>delete o[k]);
+    if(v.P){ Object.assign(o, { situacao:'Presença', tipo:'Presença', he50:v.he }); delete o.dias; delete o.horas; }
+    else Object.assign(o, { situacao:'Ausência', motivo:v.motivo, atestado:v.AT?'Sim':'Não', cid:v.AT?v.cid:'', dias:(ex && situacaoOc(ex).situacao==='Ausência' && ex.dias) || '1', tipo:v.AT?'Atestado':v.motivo });
+    regs.push(o);
+  });
+  if(!regs.length && !apagar.length){ toast('Nada para salvar.'); return; }
+  carregando(true);
+  try{
+    if(regs.length){ const { error } = await sb.from(TABELA).upsert(regs.map(({id,...dados})=>({ id, colecao:'ocorrencias', contrato_id:contrato.id, dados, atualizado_em:new Date().toISOString() }))); if(error) throw error; }
+    if(apagar.length){ const { error } = await sb.from(TABELA).delete().in('id', apagar); if(error) throw error; }
+  }catch(e){ carregando(false); alert('Não foi possível salvar: '+(e.message||e)); return; }
+  carregando(false);
+  const ids = new Set([...regs.map(r=>r.id), ...apagar]);
+  db.ocorrencias = L('ocorrencias').filter(r=>!ids.has(r.id)).concat(regs);
+  freqAlterada = false; toast(`Calendário salvo: ${regs.length} dia(s)${apagar.length?`, ${apagar.length} removido(s)`:''}.`); renderTudo();
+}
 /* ===================== TELAS ===================== */
 function telaContratos(){
   $('#barraContrato').hidden = true; $('#navMods').hidden = true; $('#btnContratos').hidden = true; $('#btnBackup').hidden = true;
