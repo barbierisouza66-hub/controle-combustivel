@@ -127,6 +127,7 @@
   table.grade .tot.ult{box-shadow:inset -2px 0 0 var(--line)}
   main:has(table.grade){max-width:none}
   table.grade select.cel{width:40px;padding:3px 0;font-size:12px;font-weight:600;text-align:center;text-align-last:center;appearance:none;-webkit-appearance:none;border-radius:4px;cursor:pointer}
+  table.grade td.abo select.cel{font-style:italic}
   table.grade td.prev select.cel{outline:2px dashed var(--warn);outline-offset:-2px}
   select.cel.s-P{background:#e6f2ec;color:#1f6f4a;border-color:#b9dcc9}
   select.cel.s-F,select.cel.s-FJ{background:#fdecea;color:#b42318;border-color:#f3c1bb}
@@ -194,7 +195,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '2.2';
+const VERSAO = '2.3';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -806,13 +807,13 @@ function telaFreqMes(){
   const datas = Array.from({length:nDias}, (_,i)=>`${mes}-${String(i+1).padStart(2,'0')}`);
   const colabs = L('colaboradores').filter(ativoColab).sort(ENT.colaboradores.ordem);
   if(!colabs.length) return `<div class="card"><p style="margin:0">Nenhum colaborador ativo. Use <b>+ Cadastrar colaborador</b> acima.</p></div>`;
-  const fds = d => [0,6].includes(new Date(d+'T12:00:00').getDay());
-  const cab = datas.map(d=>`<th class="dia ${fds(d)?'fds':''} ${d===hoje()?'hoje':''}" data-irdia="${d}" title="Abrir ${dataBR(d)} no dia detalhado">${+d.slice(8)}<br><small>${INICIAIS[new Date(d+'T12:00:00').getDay()]}</small></th>`).join('');
+  const fds = d => [0,6].includes(new Date(d+'T12:00:00').getDay()) || !!feriado(d);
+  const cab = datas.map(d=>`<th class="dia ${fds(d)?'fds':''} ${d===hoje()?'hoje':''}" data-irdia="${d}" title="${feriado(d)?esc(feriado(d))+' – ':''}Abrir ${dataBR(d)} no dia detalhado">${+d.slice(8)}<br><small>${INICIAIS[new Date(d+'T12:00:00').getDay()]}</small></th>`).join('');
   const opts = cod => ['<option value=""></option>', ...Object.entries(COD_FREQ).map(([s,c])=>`<option value="${c}" title="${s}" ${c===cod?'selected':''}>${c}</option>`)].join('');
   const linhas = colabs.map(c=>{
     const cels = datas.map(d=>{
-      const r = registroFreq(c.id, d), cob = !r && cobertura(c.id, d), st = r?.status || (cob ? cob.status : ''), cod = COD_FREQ[st] || '';
-      return `<td class="${fds(d)?'fds':''} ${cob?'prev':''}"><select data-d="${d}" ${cob?'data-prev="1"':''} class="cel s-${cod}" title="${esc(st||'não lançado')}${r?.cid?' · CID '+esc(r.cid):''}">${opts(cod)}</select></td>`;
+      const r = registroFreq(c.id, d), cob = !r && cobertura(c.id, d), ab = !r && !cob && diaAbonado(d), st = r?.status || (cob ? cob.status : ab ? (feriado(d)?'Feriado':'Folga') : ''), cod = COD_FREQ[st] || '';
+      return `<td class="${fds(d)?'fds':''} ${cob?'prev':''} ${ab?'abo':''}"><select data-d="${d}" ${cob?'data-prev="1"':''} class="cel s-${cod}" title="${ab?esc(ab):esc(st||'não lançado')}${r?.cid?' · CID '+esc(r.cid):''}">${opts(cod)}</select></td>`;
     }).join('');
     return `<tr data-c="${c.id}"><td class="nome"><b>${esc(c.nome)}</b><div class="s">${esc(c.funcao||'')}</div></td>
       <td class="tot" data-t="P"></td><td class="tot" data-t="F"></td><td class="tot" data-t="A"></td><td class="tot" data-t="AF"></td><td class="tot" data-t="O"></td><td class="tot ult" data-t="HE"></td>${cels}</tr>`;
@@ -822,7 +823,7 @@ function telaFreqMes(){
     <div class="tabela-wrap"><table class="grade"><thead><tr><th class="nome">Colaborador</th>
       <th class="tot" title="Presente">Presente</th><th class="tot" title="Falta + falta justificada">Falta</th><th class="tot">Atestado</th><th class="tot">Dias afast.</th><th class="tot" title="Férias, folga e feriado">Outros</th><th class="tot ult" title="Horas extras lançadas no dia detalhado">H. extra</th>${cab}</tr></thead>
       <tbody>${linhas}</tbody></table></div>
-    <p class="info"><b>P</b> presente · <b>F</b> falta · <b>FJ</b> falta justificada · <b>A</b> atestado · <b>AF</b> afastamento · <b>FE</b> férias · <b>FO</b> folga · <b>FR</b> feriado.
+    <p class="info"><b>P</b> presente · <b>F</b> falta · <b>FJ</b> falta justificada · <b>A</b> atestado · <b>AF</b> afastamento · <b>FE</b> férias · <b>FO</b> folga · <b>FR</b> feriado. Sábados, domingos e feriados já vêm como <b>dia abonado</b> (FO/FR, sem desconto); se a pessoa trabalhou, troque para P.
       Clique no número do dia para lançar horários, horas extras e CID. Dias em laranja continuam um atestado/afastamento lançado antes e são gravados ao salvar o mês.</p></div>`;
 }
 function totaisLinha(tr){
@@ -836,7 +837,7 @@ function prepFreqMes(){
   const tb = document.querySelector('table.grade tbody'); if(!tb) return;
   tb.querySelectorAll('tr').forEach(totaisLinha);
   tb.addEventListener('change', e=>{ const s=e.target; if(!s.matches('select.cel')) return;
-    s.className = 'cel s-'+s.value; s.dataset.mudou = '1'; s.closest('td').classList.remove('prev'); freqAlterada = true; totaisLinha(s.closest('tr')); });
+    s.className = 'cel s-'+s.value; s.dataset.mudou = '1'; s.closest('td').classList.remove('prev','abo'); freqAlterada = true; totaisLinha(s.closest('tr')); });
   document.querySelectorAll('[data-irdia]').forEach(th=>th.addEventListener('click', ()=>{
     if(freqAlterada && !confirm('Há alterações não salvas no mês. Sair sem salvar?')) return;
     freqAlterada = false; est.dataFreq = th.dataset.irdia; est.freqVista = 'dia'; renderTudo(); }));
@@ -1005,7 +1006,7 @@ function telaCalendarioRH(){
     cel.push(`<div class="d ${[0,6].includes(dow)||fer?'fds':''} ${fer?'fer':''} ${abono?'abonavel':''} ${d===hoje()?'hoje':''} ${P?'st-P':AT?'st-AT':A?'st-A':''}" data-d="${d}">
       <div class="n">${dia} <small>${fer?`<span class="tag w" title="${esc(fer)}">Feriado</span>`:DIAS_CURTOS[dow]}</small></div>
       ${fer?`<div class="hecalc" style="margin-top:-2px">${esc(fer)}</div>`:''}
-      ${abono?`<div class="abono" data-o="abono" ${P||A?'hidden':''}>✓ ${abono}</div>`:''}
+      ${abono?`<div class="abono" data-o="abono" ${P?'hidden':''}>✓ ${abono}</div>`:''}
       <label class="chk"><input type="checkbox" data-k="pres" ${P?'checked':''}> ${abono?'Trabalhou (hora extra)':'Presença'}</label>
       <label class="chk" ${abono&&!A?'hidden':''}><input type="checkbox" data-k="aus" ${A?'checked':''}> Ausência</label>
       <select data-k="motivo" ${A?'':'hidden'} title="Motivo da ausência">${MOTIVOS_AUS.map(o=>`<option ${o===motivo?'selected':''}>${esc(o)}</option>`).join('')}</select>
@@ -1033,7 +1034,7 @@ function telaCalendarioRH(){
 function celulaCal(dv){
   const g = k => dv.querySelector(`[data-k=${k}]`), P = g('pres').checked, A = g('aus').checked, AT = A && g('atest').checked;
   g('motivo').hidden = !A; dv.querySelector('[data-w=at]').hidden = !A; g('cid').hidden = !AT; g('ht').hidden = !P;
-  const ab = dv.querySelector('[data-o=abono]'); if(ab) ab.hidden = P || A;
+  const ab = dv.querySelector('[data-o=abono]'); if(ab) ab.hidden = P;
   dv.classList.remove('st-P','st-A','st-AT'); if(P) dv.classList.add('st-P'); else if(AT) dv.classList.add('st-AT'); else if(A) dv.classList.add('st-A');
   return { P, A, AT, motivo:g('motivo').value, cid:g('cid').value.trim().toUpperCase(), ht:g('ht').value };
 }
@@ -1053,7 +1054,8 @@ function resumoCal(){
         `Mês: ${hhmm(acH)}${acHE>0?` · HE ${hhmm(acHE)}`:''}`, vh && vHE ? `<b class="rs">HE ${brl(vHE)}</b> · mês ${brl(acR)}` : ''].filter(Boolean).join('<br>');
     } else {
       o.innerHTML = '';
-      if(v.A && !v.AT && v.motivo==='Falta'){ faltas++; semanasFalta.add(semanaDe(d)[0]); o.innerHTML = '<b class="neg">Desconta dia + DSR</b>'; }
+      if(v.A && diaAbonado(d)){ o.innerHTML = 'Dia abonado: ausência não desconta'; }
+      else if(v.A && !v.AT && v.motivo==='Falta'){ faltas++; semanasFalta.add(semanaDe(d)[0]); o.innerHTML = '<b class="neg">Desconta dia + DSR</b>'; }
     }
     return v;
   });
@@ -1062,7 +1064,7 @@ function resumoCal(){
   const vHE50 = h50*vh*f50, vHE100 = h100*vh*f100, dsrHE = uteis ? (vHE50+vHE100)/uteis*domFer : 0;
   const vDia = sal/30, descFaltas = faltas*vDia, descDSR = semanasFalta.size*vDia, descHoras = hNao*vh;
   const proventos = sal + vHE50 + vHE100 + dsrHE, descontos = descFaltas + descDSR + descHoras;
-  const abonados = dvs.filter((dv,i)=>diaAbonado(dv.dataset.d) && !vs[i].P && !vs[i].A).length, abonadosMotivo = vs.filter(v=>v.A && v.motivo==='Abonado').length;
+  const abonados = dvs.filter((dv,i)=>diaAbonado(dv.dataset.d) && !vs[i].P).length, abonadosMotivo = vs.filter(v=>v.A && v.motivo==='Abonado').length;
   $('#calResumo').innerHTML = kpi('Presenças', vs.filter(v=>v.P).length) + kpi('Ausências', vs.filter(v=>v.A).length, faltas+' faltas sem atestado')
     + kpi('Com atestado', vs.filter(v=>v.AT).length) + kpi('Dias abonados', abonados, `folgas${domFer?' e feriados':''} sem trabalho${abonadosMotivo?` + ${abonadosMotivo} abono(s)`:''}`) + kpi('Horas trabalhadas no mês', hhmm(acH), hNao?`${hhmm(hNao)} abaixo da jornada`:'')
     + kpi('Horas extras no mês', hhmm(acHE), `50%: ${hhmm(h50)} · 100%: ${hhmm(h100)}`);
