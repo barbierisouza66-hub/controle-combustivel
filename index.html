@@ -60,6 +60,8 @@
   .cal .d .hecalc .rs{color:var(--pri)}
   .cal .d .hecalc .neg{color:var(--danger)}
   .cal .d.fer{background:#fff7ef}
+  .cal .d .campoh{display:flex;flex-direction:column;gap:2px;font-size:11.5px;font-weight:600;color:var(--warn)}
+  .cal .d .campoh input{font-weight:600;border-color:var(--warn)}
   .cal .d .abono{font-size:12px;font-weight:600;color:var(--pri);background:var(--pri2);border-radius:6px;padding:4px 6px;margin:2px 0}
   .holerite td{white-space:normal}
   .holerite tr.sub td{background:#fafbfa;border-top:2px solid var(--line)}
@@ -195,7 +197,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '2.3';
+const VERSAO = '2.4';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -1012,7 +1014,8 @@ function telaCalendarioRH(){
       <select data-k="motivo" ${A?'':'hidden'} title="Motivo da ausência">${MOTIVOS_AUS.map(o=>`<option ${o===motivo?'selected':''}>${esc(o)}</option>`).join('')}</select>
       <label class="chk" data-w="at" ${A?'':'hidden'}><input type="checkbox" data-k="atest" ${AT?'checked':''}> Atestado</label>
       <input type="text" data-k="cid" placeholder="CID" maxlength="10" value="${esc(rec?.cid||'')}" ${AT?'':'hidden'} style="text-transform:uppercase">
-      <input type="number" data-k="ht" placeholder="Horas trab. (${num(jd||jDia(c))})" title="Horas trabalhadas no dia. Vazio = ${jd?'jornada de '+num(jd)+' h':'jornada diária (dia sem jornada: tudo é hora extra)'}" step="0.25" min="0" max="24" value="${esc(ht)}" ${P?'':'hidden'}>
+      <label class="campoh" data-w="ht" ${P?'':'hidden'}><span>${abono?'Horas de HE realizadas':'Horas trabalhadas no dia'}</span>
+        <input type="text" inputmode="decimal" data-k="ht" placeholder="ex.: 5 ou 5:30" title="Digite as horas feitas no dia (5, 5,5 ou 5:30). Vazio = ${jd?'jornada de '+num(jd)+' h':'dia inteiro ('+num(jDia(c))+' h)'}" value="${esc(ht?String(ht).replace('.',','):'')}"></label>
       <div class="hecalc" data-o="acum"></div></div>`);
   }
   const sal = salarioBase(c), div = divisorHora(c);
@@ -1031,12 +1034,18 @@ function telaCalendarioRH(){
       Na presença, informe as <b>horas trabalhadas</b> (vazio = jornada do dia). Trabalhou menos que a jornada? Lance as horas reais: a diferença vira desconto (atraso/saída).
       Domingos e feriados trabalhados entram como hora extra 100%. Feriados nacionais já estão no calendário; feriados municipais vão no cadastro do contrato. Depois clique em <b>Salvar mês</b>.</p></div>` + lista;
 }
+// Aceita 5 | 5,5 | 5.5 | 5:30 | 5h30 → horas decimais ('' se vazio/ inválido)
+function horasTxt(t){
+  t = String(t||'').trim().toLowerCase().replace('h',':').replace(/:$/,''); if(!t) return '';
+  if(t.includes(':')){ const [h,m] = t.split(':'); const v = (+h||0) + (+m||0)/60; return v>0 && v<=24 ? String(+v.toFixed(4)) : ''; }
+  const v = +t.replace(',','.'); return v>0 && v<=24 ? String(v) : '';
+}
 function celulaCal(dv){
   const g = k => dv.querySelector(`[data-k=${k}]`), P = g('pres').checked, A = g('aus').checked, AT = A && g('atest').checked;
-  g('motivo').hidden = !A; dv.querySelector('[data-w=at]').hidden = !A; g('cid').hidden = !AT; g('ht').hidden = !P;
+  g('motivo').hidden = !A; dv.querySelector('[data-w=at]').hidden = !A; g('cid').hidden = !AT; dv.querySelector('[data-w=ht]').hidden = !P;
   const ab = dv.querySelector('[data-o=abono]'); if(ab) ab.hidden = P;
   dv.classList.remove('st-P','st-A','st-AT'); if(P) dv.classList.add('st-P'); else if(AT) dv.classList.add('st-AT'); else if(A) dv.classList.add('st-A');
-  return { P, A, AT, motivo:g('motivo').value, cid:g('cid').value.trim().toUpperCase(), ht:g('ht').value };
+  return { P, A, AT, motivo:g('motivo').value, cid:g('cid').value.trim().toUpperCase(), ht:horasTxt(g('ht').value) };
 }
 function resumoCal(){
   const c = L('colaboradores').find(x=>x.id===est.calColab), sal = +numBR($('#calSal')?.value) || 0, vh = sal / divisorHora(c);
@@ -1118,6 +1127,7 @@ function prepCalendarioRH(){
     const dv = e.target.closest('.d'); if(!dv) return;
     const k = e.target.dataset.k;
     if(k==='pres' && e.target.checked) dv.querySelector('[data-k=aus]').checked = false;   // presença e ausência se excluem
+    if(k==='pres' && e.target.checked && dv.classList.contains('abonavel')) setTimeout(()=>dv.querySelector('[data-k=ht]').focus(), 0);
     if(k==='aus' && e.target.checked) dv.querySelector('[data-k=pres]').checked = false;
     dv.classList.add('mudou'); dv.dataset.mudou = '1'; freqAlterada = true; resumoCal();
   });
