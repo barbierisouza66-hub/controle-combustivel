@@ -61,7 +61,11 @@
   .cal .d .hecalc .neg{color:var(--danger)}
   .cal .d.fer{background:#fff7ef}
   .cal .d .campoh{display:flex;flex-direction:column;gap:2px;font-size:11.5px;font-weight:600;color:var(--warn)}
-  .cal .d .campoh input{font-weight:600;border-color:var(--warn)}
+  .cal .d .campoh input{font-weight:600;border-color:var(--warn);font-size:12px;padding:3px 4px;width:100%}
+  .cal .d .campoh label{display:flex;flex-direction:column;gap:1px;font-size:11px;font-weight:500;color:var(--muted)}
+  .cal .d .campoh .heh{display:flex;flex-direction:column;gap:3px}
+  .cal .d .campoh .heh label{flex-direction:row;align-items:center;gap:4px}
+  .cal .d .campoh .heh label input{flex:1;min-width:0}
   .cal .d .abono{font-size:12px;font-weight:600;color:var(--pri);background:var(--pri2);border-radius:6px;padding:4px 6px;margin:2px 0}
   .holerite td{white-space:normal}
   .holerite tr.sub td{background:#fafbfa;border-top:2px solid var(--line)}
@@ -197,7 +201,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '2.4';
+const VERSAO = '2.5';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -1004,7 +1008,8 @@ function telaCalendarioRH(){
   for(let dia=1; dia<=nDias; dia++){
     const d = `${mes}-${String(dia).padStart(2,'0')}`, dow = new Date(d+'T12:00:00').getDay(), fer = feriado(d), rec = ocDoDia(cid, d), x = rec ? situacaoOc(rec) : {};
     const P = x.situacao==='Presença', A = x.situacao==='Ausência', AT = A && x.atestado==='Sim', jd = jornadaDoDia(c, d), abono = diaAbonado(d);
-    const motivo = x.motivo || 'Falta', ht = rec && P ? (rec.horasTrab || ((he50Oc(rec)||he100Oc(rec)) ? jd + he50Oc(rec) + he100Oc(rec) : '')) : '';
+    const motivo = x.motivo || 'Falta', temHE = !!(rec?.heIni || rec?.heFim);
+    const ht = rec && P ? (temHE ? (rec.htInf||'') : (rec.horasTrab || ((he50Oc(rec)||he100Oc(rec)) ? jd + he50Oc(rec) + he100Oc(rec) : ''))) : '';
     cel.push(`<div class="d ${[0,6].includes(dow)||fer?'fds':''} ${fer?'fer':''} ${abono?'abonavel':''} ${d===hoje()?'hoje':''} ${P?'st-P':AT?'st-AT':A?'st-A':''}" data-d="${d}">
       <div class="n">${dia} <small>${fer?`<span class="tag w" title="${esc(fer)}">Feriado</span>`:DIAS_CURTOS[dow]}</small></div>
       ${fer?`<div class="hecalc" style="margin-top:-2px">${esc(fer)}</div>`:''}
@@ -1014,8 +1019,13 @@ function telaCalendarioRH(){
       <select data-k="motivo" ${A?'':'hidden'} title="Motivo da ausência">${MOTIVOS_AUS.map(o=>`<option ${o===motivo?'selected':''}>${esc(o)}</option>`).join('')}</select>
       <label class="chk" data-w="at" ${A?'':'hidden'}><input type="checkbox" data-k="atest" ${AT?'checked':''}> Atestado</label>
       <input type="text" data-k="cid" placeholder="CID" maxlength="10" value="${esc(rec?.cid||'')}" ${AT?'':'hidden'} style="text-transform:uppercase">
-      <label class="campoh" data-w="ht" ${P?'':'hidden'}><span>${abono?'Horas de HE realizadas':'Horas trabalhadas no dia'}</span>
-        <input type="text" inputmode="decimal" data-k="ht" placeholder="ex.: 5 ou 5:30" title="Digite as horas feitas no dia (5, 5,5 ou 5:30). Vazio = ${jd?'jornada de '+num(jd)+' h':'dia inteiro ('+num(jDia(c))+' h)'}" value="${esc(ht?String(ht).replace('.',','):'')}"></label>
+      <div class="campoh" data-w="ht" ${P?'':'hidden'}>
+        <label ${abono?'hidden':''}><span>Horas trabalhadas no dia</span>
+          <input type="text" inputmode="decimal" data-k="ht" placeholder="vazio = jornada" title="Horas da jornada feitas no dia (8, 7,5 ou 7:30). Vazio = ${jd?'jornada de '+num(jd)+' h':'dia inteiro'}" value="${esc(ht?String(ht).replace('.',','):'')}"></label>
+        <span>Hora extra</span>
+        <div class="heh"><label>Início<input type="time" data-k="hei" value="${esc(rec?.heIni||'')}"></label><label>Fim<input type="time" data-k="hef" value="${esc(rec?.heFim||'')}"></label></div>
+        <label>Intervalo (se houver)<input type="text" inputmode="decimal" data-k="hint" placeholder="ex.: 1:00" value="${esc(rec?.heInt||'')}"></label>
+      </div>
       <div class="hecalc" data-o="acum"></div></div>`);
   }
   const sal = salarioBase(c), div = divisorHora(c);
@@ -1040,12 +1050,23 @@ function horasTxt(t){
   if(t.includes(':')){ const [h,m] = t.split(':'); const v = (+h||0) + (+m||0)/60; return v>0 && v<=24 ? String(+v.toFixed(4)) : ''; }
   const v = +t.replace(',','.'); return v>0 && v<=24 ? String(v) : '';
 }
+// Duração da HE: fim − início − intervalo (passa da meia-noite se fim < início)
+function duracaoHE(ini, fim, intervalo){
+  if(!ini || !fim) return 0;
+  const m = t => { const [h,mi] = t.split(':').map(Number); return h*60 + (mi||0); };
+  let min = m(fim) - m(ini); if(min <= 0) min += 1440;
+  const iv = String(intervalo||'').trim() ? Math.round((+horasTxt(intervalo)||0)*60) : 0;
+  return Math.max(0, min - iv) / 60;
+}
 function celulaCal(dv){
   const g = k => dv.querySelector(`[data-k=${k}]`), P = g('pres').checked, A = g('aus').checked, AT = A && g('atest').checked;
   g('motivo').hidden = !A; dv.querySelector('[data-w=at]').hidden = !A; g('cid').hidden = !AT; dv.querySelector('[data-w=ht]').hidden = !P;
   const ab = dv.querySelector('[data-o=abono]'); if(ab) ab.hidden = P;
   dv.classList.remove('st-P','st-A','st-AT'); if(P) dv.classList.add('st-P'); else if(AT) dv.classList.add('st-AT'); else if(A) dv.classList.add('st-A');
-  return { P, A, AT, motivo:g('motivo').value, cid:g('cid').value.trim().toUpperCase(), ht:horasTxt(g('ht').value) };
+  const heIni = g('hei').value, heFim = g('hef').value, heInt = g('hint').value.trim(), htInf = horasTxt(g('ht').value);   // em folga/feriado o campo fica oculto (só lançamentos antigos)
+  const durHE = duracaoHE(heIni, heFim, heInt), jd = jornadaDoDia(L('colaboradores').find(x=>x.id===est.calColab), dv.dataset.d);
+  const ht = durHE > 0 ? String(+((dv.classList.contains('abonavel') ? 0 : (+htInf || jd)) + durHE).toFixed(4)) : htInf;
+  return { P, A, AT, motivo:g('motivo').value, cid:g('cid').value.trim().toUpperCase(), ht, heIni, heFim, heInt, htInf, durHE };
 }
 function resumoCal(){
   const c = L('colaboradores').find(x=>x.id===est.calColab), sal = +numBR($('#calSal')?.value) || 0, vh = sal / divisorHora(c);
@@ -1059,7 +1080,7 @@ function resumoCal(){
     if(v.P){
       const r = calcDia(c, d, v.ht), vHE = (r.he50*f50 + r.he100*f100)*vh;
       acH += r.h; acHE += r.he50 + r.he100; h50 += r.he50; h100 += r.he100; hNao += r.naoTrab; acR += vHE;
-      o.innerHTML = [r.he50>0?`<b class="he">HE 50% +${hhmm(r.he50)}</b>`:'', r.he100>0?`<b class="he">HE 100% +${hhmm(r.he100)}</b>`:'', r.naoTrab>0?`<b class="neg">−${hhmm(r.naoTrab)} não trab.</b>`:'',
+      o.innerHTML = [dv.classList.contains('abonavel') && !v.durHE && !v.htInf ? '<b class="neg">Informe início e fim da HE (vazio = dia inteiro)</b>' : '', r.he50>0?`<b class="he">HE 50% +${hhmm(r.he50)}</b>`:'', r.he100>0?`<b class="he">HE 100% +${hhmm(r.he100)}</b>`:'', r.naoTrab>0?`<b class="neg">−${hhmm(r.naoTrab)} não trab.</b>`:'',
         `Mês: ${hhmm(acH)}${acHE>0?` · HE ${hhmm(acHE)}`:''}`, vh && vHE ? `<b class="rs">HE ${brl(vHE)}</b> · mês ${brl(acR)}` : ''].filter(Boolean).join('<br>');
     } else {
       o.innerHTML = '';
@@ -1127,13 +1148,13 @@ function prepCalendarioRH(){
     const dv = e.target.closest('.d'); if(!dv) return;
     const k = e.target.dataset.k;
     if(k==='pres' && e.target.checked) dv.querySelector('[data-k=aus]').checked = false;   // presença e ausência se excluem
-    if(k==='pres' && e.target.checked && dv.classList.contains('abonavel')) setTimeout(()=>dv.querySelector('[data-k=ht]').focus(), 0);
+    if(k==='pres' && e.target.checked && dv.classList.contains('abonavel')) setTimeout(()=>dv.querySelector('[data-k=hei]').focus(), 0);
     if(k==='aus' && e.target.checked) dv.querySelector('[data-k=pres]').checked = false;
     dv.classList.add('mudou'); dv.dataset.mudou = '1'; freqAlterada = true; resumoCal();
   });
   $('#calSal').addEventListener('input', ()=>{ freqAlterada = true; resumoCal(); });
   $('#calSal').addEventListener('blur', e=>{ const n = numBR(e.target.value); if(n!=='') e.target.value = fmtBR(n); });
-  cal.addEventListener('input', e=>{ if(e.target.dataset.k!=='ht') return; const dv=e.target.closest('.d'); dv.classList.add('mudou'); dv.dataset.mudou='1'; freqAlterada=true; resumoCal(); });
+  cal.addEventListener('input', e=>{ if(!['ht','hei','hef','hint'].includes(e.target.dataset.k)) return; const dv=e.target.closest('.d'); dv.classList.add('mudou'); dv.dataset.mudou='1'; freqAlterada=true; resumoCal(); });
   const trocar = id => { if(freqAlterada && !confirm('Há alterações não salvas neste calendário. Trocar sem salvar?')){ $('#calColab').value = est.calColab; return; } freqAlterada=false; est.calColab = id; renderTudo(); };
   $('#calColab').addEventListener('change', e=>trocar(e.target.value));
   const ops = [...$('#calColab').options].map(o=>o.value), pos = ops.indexOf(est.calColab);
@@ -1154,9 +1175,10 @@ async function salvarCalendarioRH(){
     const d = dv.dataset.d, v = celulaCal(dv), ex = ocDoDia(cid, d);
     if(!v.P && !v.A){ if(ex) apagar.push(ex.id); return; }
     const o = { ...(ex || { id:`oc_${cid}_${d}`, colabId:cid, data:d, obs:'', criadoPor:$('#usuarioEmail').textContent }) };
-    ['motivo','atestado','cid','he50','he100','horasTrab','horasNaoTrab'].forEach(k=>delete o[k]);
+    ['motivo','atestado','cid','he50','he100','horasTrab','horasNaoTrab','heIni','heFim','heInt','htInf'].forEach(k=>delete o[k]);
     if(v.P){ const r = calcDia(colab, d, v.ht);
-      Object.assign(o, { situacao:'Presença', tipo:'Presença', horasTrab:String(r.h), he50:String(+r.he50.toFixed(2)), he100:String(+r.he100.toFixed(2)), horasNaoTrab:String(+r.naoTrab.toFixed(2)) }); delete o.dias; delete o.horas; }
+      Object.assign(o, { situacao:'Presença', tipo:'Presença', horasTrab:String(r.h), he50:String(+r.he50.toFixed(2)), he100:String(+r.he100.toFixed(2)), horasNaoTrab:String(+r.naoTrab.toFixed(2)) }); delete o.dias; delete o.horas;
+      if(v.heIni || v.heFim) Object.assign(o, { heIni:v.heIni, heFim:v.heFim, heInt:v.heInt, htInf:v.htInf }); }
     else Object.assign(o, { situacao:'Ausência', motivo:v.motivo, atestado:v.AT?'Sim':'Não', cid:v.AT?v.cid:'', dias:(ex && situacaoOc(ex).situacao==='Ausência' && ex.dias) || '1', tipo:v.AT?'Atestado':v.motivo });
     regs.push(o);
   });
