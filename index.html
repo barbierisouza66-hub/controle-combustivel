@@ -57,6 +57,7 @@
   .cal .d select,.cal .d input[type=text],.cal .d input[type=number]{font-size:12px;padding:3px 5px;width:100%}
   .cal .d .hecalc{font-size:11.5px;color:var(--muted);line-height:1.35}
   .cal .d .hecalc .he{color:var(--warn)}
+  .cal .d .hecalc .rs{color:var(--pri)}
   input,select,textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
   input:focus,select:focus,textarea:focus{outline:2px solid var(--pri2);border-color:var(--pri)}
   button{font:inherit;cursor:pointer;padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:#fff;color:var(--ink)}
@@ -247,13 +248,13 @@ const ENT = {
   contratos: { nome:'contrato', titulo:r=>r.nome, campos:[
       {k:'nome',l:'Nome do contrato',req:1},{k:'cliente',l:'Cliente'},{k:'local',l:'Unidade / Local'},{k:'numero',l:'Nº do contrato'},
       {k:'inicio',l:'Início',t:'date'},{k:'fim',l:'Término',t:'date'},{k:'status',l:'Situação',t:'select',op:['Ativo','Suspenso','Encerrado']},
-      {k:'diasUteis',l:'Dias úteis por mês (RH)',t:'number',step:'1',def:'22'},{k:'jornada',l:'Jornada diária em horas (RH)',t:'number',step:'0.01',def:'8'},{k:'horasSemana',l:'Jornada semanal em horas (RH)',t:'number',step:'0.01',def:'44'},
+      {k:'diasUteis',l:'Dias úteis por mês (RH)',t:'number',step:'1',def:'22'},{k:'jornada',l:'Jornada diária em horas (RH)',t:'number',step:'0.01',def:'8'},{k:'horasSemana',l:'Jornada semanal em horas (RH)',t:'number',step:'0.01',def:'44'},{k:'adicionalHE',l:'Adicional de hora extra (%)',t:'number',step:'1',def:'50'},
       {k:'modulos',l:'Módulos deste contrato',t:'multi',op:()=>MODULOS_OPCIONAIS,defTodos:1},{k:'obs',l:'Observações',t:'textarea'}] },
 
   colaboradores: { nome:'colaborador', titulo:r=>r.nome, ordem:(a,b)=>String(a.nome).localeCompare(b.nome), campos:[
       {k:'nome',l:'Nome',req:1},{k:'matricula',l:'Matrícula'},{k:'funcao',l:'Função',t:'list',op:funcoes},{k:'admissao',l:'Admissão',t:'date',semDef:1},
-      {k:'telefone',l:'Telefone'},{k:'horasDia',l:'Jornada diária (h)',t:'number',step:'0.01'},{k:'horasSemana',l:'Jornada semanal (h)',t:'number',step:'0.01'},{k:'ativo',l:'Situação',t:'select',op:['Ativo','Inativo']}],
-    cols:[col('Nome',r=>r.nome),col('Matrícula',r=>r.matricula),col('Função',r=>r.funcao),col('Admissão',r=>dataBR(r.admissao)),col('Telefone',r=>r.telefone),col('Jornada',r=>`${num(jDia(r))} h/dia · ${num(jSem(r))} h/sem`),col('Situação',r=>sitTag(r.ativo||'Ativo'),{html:1})] },
+      {k:'telefone',l:'Telefone'},{k:'horasDia',l:'Jornada diária (h)',t:'number',step:'0.01'},{k:'horasSemana',l:'Jornada semanal (h)',t:'number',step:'0.01'},{k:'salario',l:'Salário mensal (R$)',t:'number'},{k:'valorHora',l:'Valor da hora (R$) – vazio = salário ÷ (jornada semanal × 5)',t:'number',step:'0.0001'},{k:'ativo',l:'Situação',t:'select',op:['Ativo','Inativo']}],
+    cols:[col('Nome',r=>r.nome),col('Matrícula',r=>r.matricula),col('Função',r=>r.funcao),col('Admissão',r=>dataBR(r.admissao)),col('Telefone',r=>r.telefone),col('Jornada',r=>`${num(jDia(r))} h/dia · ${num(jSem(r))} h/sem`),col('Valor/hora',r=>vHora(r)?brl(vHora(r)):'—',{n:1}),col('Situação',r=>sitTag(r.ativo||'Ativo'),{html:1})] },
 
   equipamentos: { nome:'equipamento', titulo:r=>`${r.codigo} – ${r.tipo}${r.modelo?' ('+r.modelo+')':''}`, ordem:(a,b)=>String(a.codigo).localeCompare(b.codigo), campos:[
       {k:'codigo',l:'Código / Patrimônio',req:1},{k:'tipo',l:'Tipo',t:'select',op:TIPOS_EQ},{k:'modelo',l:'Marca / Modelo'},{k:'placa',l:'Placa / Nº de série'},
@@ -619,6 +620,8 @@ const COM_CID = ['Atestado','Afastamento'];
 const DIAS_SEMANA = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
 const jDia = c => +c?.horasDia || jornada();
 const jSem = c => +c?.horasSemana || jornadaSemana();
+const vHora = c => +c?.valorHora || (+c?.salario ? +c.salario / (jSem(c)*5) : 0);   // 44 h/sem → divisor 220
+const pctHE = () => (contrato?.adicionalHE===undefined || contrato?.adicionalHE==='') ? 50 : +contrato.adicionalHE;
 const minutos = t => { if(!t) return null; const [h,m] = String(t).split(':').map(Number); return isNaN(h) ? null : h*60+(m||0); };
 const addDias = (d, n) => { const x = new Date(d+'T12:00:00'); x.setDate(x.getDate()+n); return x.toISOString().slice(0,10); };
 const diaSemana = d => DIAS_SEMANA[new Date(d+'T12:00:00').getDay()];
@@ -882,8 +885,10 @@ function telaCalendarioRH(){
       <select id="calColab" style="min-width:240px">${colabs.map(x=>`<option value="${x.id}" ${x.id===cid?'selected':''}>${esc(x.nome)}</option>`).join('')}</select>
       <button id="calProx" title="Próximo colaborador">▶</button>
       <b>${mesBR(mes)}</b><span class="info" style="margin:0">${esc(c.funcao||'')}${c.funcao?' · ':''}jornada ${num(jDia(c))} h/dia</span><span style="flex:1"></span>
+      <label style="flex-direction:row;align-items:center;gap:6px">Valor da hora R$ <input type="number" id="calVH" step="0.01" min="0" style="width:100px" value="${vHora(c)?(+vHora(c).toFixed(2)):''}" placeholder="0,00" title="Também pode ser calculado pelo salário no cadastro do colaborador"></label>
+      <span class="info" style="margin:0">HE +${num(pctHE(),0)}%</span>
       <button id="calUteis">Marcar dias úteis vazios como Presença (até hoje)</button><button class="pri" id="calSalvar">Salvar mês</button></div>
-    <div class="kpis" id="calResumo"></div>
+    <div class="kpis" id="calResumo"></div><div class="kpis" id="calValores"></div>
     <div class="tabela-wrap"><div class="cal">${DIAS_CURTOS.map(x=>`<div class="cab">${x}</div>`).join('')}${cel.join('')}</div></div>
     <p class="info">Marque <b>Presença</b> ou <b>Ausência</b> em cada dia. Na ausência, escolha o motivo e marque <b>Atestado</b> se houver (aparece o campo do CID).
       Na presença, informe as <b>horas trabalhadas</b> no dia (vazio = jornada); o que passar da jornada vira hora extra e vai somando no mês. A jornada diária fica no cadastro do colaborador. Depois clique em <b>Salvar mês</b>. Para dias, horas de atraso ou observações, use o lançamento detalhado abaixo.</p></div>` + lista;
@@ -895,18 +900,23 @@ function celulaCal(dv){
   return { P, A, AT, motivo:g('motivo').value, cid:g('cid').value.trim().toUpperCase(), ht:g('ht').value };
 }
 function resumoCal(){
-  const jd = jDia(L('colaboradores').find(x=>x.id===est.calColab));
-  let acH = 0, acHE = 0;
+  const jd = jDia(L('colaboradores').find(x=>x.id===est.calColab)), vh = +($('#calVH')?.value) || 0, fHE = 1 + pctHE()/100;
+  let acH = 0, acHE = 0, acR = 0, rNormal = 0, rHE = 0, rAtest = 0;
   const vs = [...document.querySelectorAll('.cal .d[data-d]')].map(dv=>{   // dias em ordem: vai acumulando o mês
     const v = celulaCal(dv), o = dv.querySelector('[data-o=acum]');
-    if(v.P){ const h = +v.ht || jd, he = Math.max(0, h - jd); acH += h; acHE += he;
-      o.innerHTML = `${he>0?`<b class="he">HE +${hhmm(he)}</b><br>`:''}Mês: ${hhmm(acH)}${acHE>0?` · HE ${hhmm(acHE)}`:''}`; }
+    if(v.P){ const h = +v.ht || jd, he = Math.max(0, h - jd), vn = (h-he)*vh, ve = he*vh*fHE;
+      acH += h; acHE += he; rNormal += vn; rHE += ve; acR += vn + ve;
+      o.innerHTML = `${he>0?`<b class="he">HE +${hhmm(he)}</b><br>`:''}Mês: ${hhmm(acH)}${acHE>0?` · HE ${hhmm(acHE)}`:''}${vh?`<br><b class="rs">${brl(vn+ve)}</b> · mês ${brl(acR)}`:''}`; }
+    else if(v.AT){ rAtest += jd*vh; acR += jd*vh; o.textContent = ''; }
     else o.textContent = '';
     return v;
   });
   $('#calResumo').innerHTML = kpi('Presenças', vs.filter(v=>v.P).length) + kpi('Ausências', vs.filter(v=>v.A).length, vs.filter(v=>v.A&&!v.AT&&v.motivo==='Falta').length+' faltas sem atestado')
     + kpi('Com atestado', vs.filter(v=>v.AT).length) + kpi('Horas trabalhadas no mês', hhmm(acH), `jornada ${num(jd)} h/dia`)
     + kpi('Horas extras no mês', hhmm(acHE), acHE ? 'soma do que passou da jornada' : 'nenhuma até agora');
+  $('#calValores').innerHTML = !vh ? `<div class="kpi" style="grid-column:1/-1"><div class="r">Valor financeiro</div><div class="r" style="font-size:13px;margin-top:4px">Informe o <b>valor da hora</b> acima (ou o salário no cadastro do colaborador) para calcular os valores.</div></div>`
+    : kpi('Valor das horas normais', brl(rNormal), `${hhmm(acH-acHE)} × ${brl(vh)}`) + kpi(`Valor das horas extras (+${num(pctHE(),0)}%)`, brl(rHE), `${hhmm(acHE)} × ${brl(vh*fHE)}`)
+      + kpi('Atestados remunerados', brl(rAtest), 'jornada × valor da hora') + kpi('Total do mês', `<span style="color:var(--pri)">${brl(rNormal+rHE+rAtest)}</span>`, 'normais + extras + atestados');
 }
 function prepCalendarioRH(){
   freqAlterada = false;
@@ -920,6 +930,7 @@ function prepCalendarioRH(){
     if(k==='aus' && e.target.checked) dv.querySelector('[data-k=pres]').checked = false;
     dv.classList.add('mudou'); dv.dataset.mudou = '1'; freqAlterada = true; resumoCal();
   });
+  $('#calVH').addEventListener('input', ()=>{ freqAlterada = true; resumoCal(); });
   cal.addEventListener('input', e=>{ if(e.target.dataset.k!=='ht') return; const dv=e.target.closest('.d'); dv.classList.add('mudou'); dv.dataset.mudou='1'; freqAlterada=true; resumoCal(); });
   const trocar = id => { if(freqAlterada && !confirm('Há alterações não salvas neste calendário. Trocar sem salvar?')){ $('#calColab').value = est.calColab; return; } freqAlterada=false; est.calColab = id; renderTudo(); };
   $('#calColab').addEventListener('change', e=>trocar(e.target.value));
@@ -946,15 +957,20 @@ async function salvarCalendarioRH(){
     else Object.assign(o, { situacao:'Ausência', motivo:v.motivo, atestado:v.AT?'Sim':'Não', cid:v.AT?v.cid:'', dias:(ex && situacaoOc(ex).situacao==='Ausência' && ex.dias) || '1', tipo:v.AT?'Atestado':v.motivo });
     regs.push(o);
   });
-  if(!regs.length && !apagar.length){ toast('Nada para salvar.'); return; }
+  const colab = L('colaboradores').find(x=>x.id===cid), vhNovo = $('#calVH').value, vhMudou = vhNovo!=='' && Math.abs(+vhNovo - vHora(colab)) > 0.004;
+  const colabAlt = vhMudou ? { ...colab, valorHora:String(vhNovo) } : null;
+  if(!regs.length && !apagar.length && !colabAlt){ toast('Nada para salvar.'); return; }
   carregando(true);
   try{
-    if(regs.length){ const { error } = await sb.from(TABELA).upsert(regs.map(({id,...dados})=>({ id, colecao:'ocorrencias', contrato_id:contrato.id, dados, atualizado_em:new Date().toISOString() }))); if(error) throw error; }
+    const linhas = regs.map(({id,...dados})=>({ id, colecao:'ocorrencias', contrato_id:contrato.id, dados, atualizado_em:new Date().toISOString() }));
+    if(colabAlt){ const { id, ...dados } = colabAlt; linhas.push({ id, colecao:'colaboradores', contrato_id:contrato.id, dados, atualizado_em:new Date().toISOString() }); }
+    if(linhas.length){ const { error } = await sb.from(TABELA).upsert(linhas); if(error) throw error; }
     if(apagar.length){ const { error } = await sb.from(TABELA).delete().in('id', apagar); if(error) throw error; }
   }catch(e){ carregando(false); alert('Não foi possível salvar: '+(e.message||e)); return; }
   carregando(false);
   const ids = new Set([...regs.map(r=>r.id), ...apagar]);
   db.ocorrencias = L('ocorrencias').filter(r=>!ids.has(r.id)).concat(regs);
+  if(colabAlt){ const i = db.colaboradores.findIndex(x=>x.id===cid); if(i>-1) db.colaboradores[i] = colabAlt; }
   freqAlterada = false; toast(`Calendário salvo: ${regs.length} dia(s)${apagar.length?`, ${apagar.length} removido(s)`:''}.`); renderTudo();
 }
 /* ===================== TELAS ===================== */
