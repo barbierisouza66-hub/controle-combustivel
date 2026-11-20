@@ -107,6 +107,12 @@
   .gvagas .gb i{display:block;height:100%;border-radius:4px}
   .gvagas .gd{font-size:13px;text-align:right;line-height:1.15}
   .gvagas .s,.faixas .s{font-size:11px;color:var(--muted)}
+  .gvagas .gn{white-space:normal}
+  .prog{display:flex;gap:3px;margin-top:3px}
+  .prog i{width:14px;height:6px;border-radius:2px;background:#e3e6e4}
+  .prog i.ok{background:var(--pri)}
+  .preencher{display:flex;gap:4px;align-items:center;white-space:nowrap}
+  .preencher input{width:130px;padding:3px 5px;font-size:12px}
   .gvazio{border:2px dashed var(--line);border-radius:8px;padding:22px;text-align:center;color:var(--muted);font-size:14px;margin-top:6px}
   .faixas{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
   .faixas i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
@@ -215,7 +221,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '3.7';
+const VERSAO = '3.8';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -299,6 +305,19 @@ const chaveQ = r => `${r.funcao||'Sem função'}|${turnoDe(r)}`;   // quadro por
 const ativosQ = q => L('colaboradores').filter(c=>ativoColab(c)&&chaveQ(c)===chaveQ(q)).length;
 const difTag = d => d===0 ? tag('completo') : d<0 ? tag(String(d),'d') : tag('+'+d,'w');
 const vagaAberta = v => !['Preenchida','Cancelada'].includes(v.status||'Aberta');
+const qtdVaga = v => Math.max(1, +v.qtd || 1);
+const preenchVaga = v => Array.isArray(v.preench) ? v.preench.filter(Boolean).sort() : [];
+const faltamVaga = v => vagaAberta(v) ? Math.max(0, qtdVaga(v) - preenchVaga(v).length) : 0;
+const diasAte = (de, ate) => Math.max(0, Math.round((new Date(ate+'T12:00:00') - new Date(de+'T12:00:00'))/864e5));
+const isoDeBR = t => { const m = String(t).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/); if(!m) return /^\d{4}-\d{2}-\d{2}$/.test(String(t).trim()) ? String(t).trim() : ''; const a = m[3].length===2 ? '20'+m[3] : m[3]; return `${a}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`; };
+// Fecha a vaga sozinho quando todas as posições foram preenchidas (e reabre se uma data for removida)
+function ajustarVaga(o){
+  const p = preenchVaga(o), q = qtdVaga(o);
+  if(p.length >= q){ o.status = 'Preenchida'; o.fechamento = p[p.length-1]; }
+  else if(o.status === 'Preenchida' && o.autoFechada){ o.status = p.length ? 'Em seleção' : 'Aberta'; delete o.fechamento; }
+  o.autoFechada = p.length >= q ? 1 : undefined; if(!o.autoFechada) delete o.autoFechada;
+  return o;
+}
 const diasVaga = v => !v.abertura ? 0 : Math.max(0, Math.round((new Date((vagaAberta(v)?hoje():(v.fechamento||hoje()))+'T12:00:00') - new Date(v.abertura+'T12:00:00'))/864e5));
 const funcoes = () => [...new Set([...FUNCOES_PADRAO, ...L('quadro').map(q=>q.funcao), ...L('colaboradores').map(c=>c.funcao)].filter(Boolean))];
 const materiais = () => [...new Set([...MATERIAIS_PADRAO, ...L('fardos').map(f=>f.material)].filter(Boolean))];
@@ -353,11 +372,23 @@ const ENT = {
       {k:'qtd',l:'Quantidade de posições',t:'number',step:'1',def:'1'},{k:'abertura',l:'Data de abertura',t:'date',req:1},
       {k:'status',l:'Situação da vaga',t:'select',op:['Aberta','Em seleção','Preenchida','Cancelada']},
       {k:'fechamento',l:'Data de fechamento',t:'date',semDef:1,se:o=>['Preenchida','Cancelada'].includes(o.status)},
+      {k:'preenchTxt',l:'Posições já preenchidas – datas (dd/mm/aaaa, separadas por vírgula)'},
       {k:'motivo',l:'Motivo (substituição, aumento de quadro…)'},{k:'obs',l:'Observação / candidato'}],
-    validar:o=>['Preenchida','Cancelada'].includes(o.status) && !o.fechamento ? 'Informe a data de fechamento da vaga.' : (o.fechamento && o.abertura && o.fechamento < o.abertura ? 'A data de fechamento não pode ser antes da abertura.' : ''),
-    cols:[col('Nº',r=>r.numero),col('Vaga',r=>r.nome),col('Turno',r=>turnoDe(r)),col('Qtd',r=>num(+r.qtd||1,0),{n:1}),col('Abertura',r=>dataBR(r.abertura)),
+    paraForm:r=>({ preenchTxt: preenchVaga(r).map(dataBR).join(', ') }),
+    antesSalvar:o=>{ const lista = String(o.preenchTxt||'').split(/[,;\s]+/).filter(Boolean).map(isoDeBR).filter(Boolean); delete o.preenchTxt; o.preench = lista;
+      const ant = L('vagas').find(v=>v.id===o.id); if(ant?.autoFechada) o.autoFechada = 1; return ajustarVaga(o); },
+    validar:o=>{ const n = String(o.preenchTxt||'').split(/[,;\s]+/).filter(Boolean), ok = n.map(isoDeBR);
+      if(ok.some(x=>!x)) return 'Datas de preenchimento inválidas. Use dd/mm/aaaa separadas por vírgula.';
+      if(n.length > Math.max(1,+o.qtd||1)) return `Há ${n.length} datas de preenchimento, mas a vaga tem só ${Math.max(1,+o.qtd||1)} posição(ões).`;
+      if(o.abertura && ok.some(x=>x < o.abertura)) return 'Uma data de preenchimento está antes da abertura da vaga.';
+      if(n.length >= Math.max(1,+o.qtd||1)) return '';   // fecha sozinha
+      return ['Preenchida','Cancelada'].includes(o.status) && !o.fechamento ? 'Informe a data de fechamento da vaga.' : (o.fechamento && o.abertura && o.fechamento < o.abertura ? 'A data de fechamento não pode ser antes da abertura.' : ''); },
+    cols:[col('Nº',r=>r.numero),col('Vaga',r=>r.nome),col('Turno',r=>turnoDe(r)),col('Posições',r=>num(qtdVaga(r),0),{n:1}),col('Preenchidas',r=>`<b>${preenchVaga(r).length} de ${qtdVaga(r)}</b>${preenchVaga(r).length?`<div class="s">${preenchVaga(r).map(dataBR).join(', ')}</div>`:''}`,{html:1}),
+      col('Faltam',r=>num(faltamVaga(r),0),{n:1}),
+      col('Preencher posição',r=>vagaAberta(r)?`<span class="preencher"><input type="date" data-pdata="${r.id}" value="${hoje()}"><button class="peq pri" data-preencher="${r.id}">+1 preenchida</button></span>`:'',{html:1}),col('Abertura',r=>dataBR(r.abertura)),
       col('Situação',r=>tag(r.status||'Aberta', vagaAberta(r)?(diasVaga(r)>60?'d':'w'):(r.status==='Preenchida'?'':'n')),{html:1}),col('Fechamento',r=>dataBR(r.fechamento)),
-      col('Dias em aberto',r=>num(diasVaga(r),0),{n:1}),col('Motivo',r=>r.motivo),col('Observação',r=>r.obs)] },
+      col('Dias em aberto',r=>num(diasVaga(r),0),{n:1}),
+      col('Motivo',r=>r.motivo),col('Observação',r=>r.obs)] },
 
   ocorrencias: { nome:'ocorrência', data:'data', campos:[
       {k:'data',l:'Data',t:'date',req:1},{k:'colabId',l:'Colaborador',t:'ref',ent:'colaboradores',filtro:ativoColab,req:1},
@@ -684,7 +715,7 @@ function graficoVagas(naAba){
   const faixas = [['até 30 dias',d=>d<=30],['31 a 60',d=>d>30&&d<=60],['61 a 90',d=>d>60&&d<=90],['mais de 90',d=>d>90]].map(([n,f],i)=>[n, dAb.filter(f).length, ['var(--pri)','#ca8a04','#d97706','var(--danger)'][i]]);
   const grafico = `<div class="card"><h2>Há quanto tempo as vagas estão em aberto</h2>
     ${ab.length ? `<div class="faixas">${faixas.map(([n,c,co])=>`<div><i style="background:${co}"></i>${n}: <b>${c}</b></div>`).join('')}</div>
-    <div class="gvagas">${ord.map(v=>{ const d = diasVaga(v); return `<div class="gl"><div class="gn" title="${esc(v.obs||'')}"><b>${esc(v.numero)}</b> ${esc(v.nome)} <span class="s">${esc(turnoDe(v))}${(+v.qtd||1)>1?' · '+v.qtd+' posições':''}</span></div>
+    <div class="gvagas">${ord.map(v=>{ const d = diasVaga(v); return `<div class="gl"><div class="gn" title="${esc(v.obs||'')}"><b>${esc(v.numero)}</b> ${esc(v.nome)} <span class="s">${esc(turnoDe(v))}${qtdVaga(v)>1?` · <b>${preenchVaga(v).length} de ${qtdVaga(v)}</b> preenchidas · faltam ${faltamVaga(v)}`:''}</span>${qtdVaga(v)>1?`<div class="prog">${Array.from({length:qtdVaga(v)},(_,i)=>`<i class="${i<preenchVaga(v).length?'ok':''}" title="${i<preenchVaga(v).length?'preenchida em '+dataBR(preenchVaga(v)[i])+' ('+diasAte(v.abertura,preenchVaga(v)[i])+' dias)':'em aberto'}"></i>`).join('')}</div>`:''}</div>
       <div class="gb"><i style="width:${Math.max(2,d/max*100)}%;background:${cor(d)}"></i></div><div class="gd"><b>${d}</b> dias<div class="s">desde ${dataBR(v.abertura)}</div></div></div>`; }).join('')}</div>`
       : `<div class="gvazio">📊 O gráfico aparece aqui assim que houver <b>vaga com situação Aberta ou Em seleção</b>.<br>
           ${naAba ? 'Cadastre a vaga no formulário <b>"Novo: vaga em aberto"</b> logo abaixo (Nº, nome, data de abertura).' : 'Cadastre em <b>RH → Quadro previsto e vagas</b>.'}
@@ -693,13 +724,15 @@ function graficoVagas(naAba){
 }
 function telaQuadroVagas(){
   const q = L('quadro'), prev = soma(q,r=>r.previsto), ativos = soma(q,ativosQ), dif = ativos - prev;
-  const vs = L('vagas'), ab = vs.filter(vagaAberta), dAb = ab.map(diasVaga), fech = vs.filter(v=>v.status==='Preenchida' && v.fechamento);
-  const media = dAb.length ? soma(dAb,x=>x)/dAb.length : 0, tmp = fech.length ? soma(fech,diasVaga)/fech.length : null;
-  const posicoes = soma(ab,v=>+v.qtd||1);
+  const vs = L('vagas'), ab = vs.filter(vagaAberta), dAb = ab.map(diasVaga);
+  // tempo para preencher contado por posição (cada contratação desde a abertura da vaga) — mais justo em vagas com várias posições
+  const tempos = vs.flatMap(v=>preenchVaga(v).map(d=>diasAte(v.abertura, d))).concat(vs.filter(v=>v.status==='Preenchida' && v.fechamento && !preenchVaga(v).length).map(diasVaga));
+  const media = dAb.length ? soma(dAb,x=>x)/dAb.length : 0, tmp = tempos.length ? soma(tempos,x=>x)/tempos.length : null;
+  const posicoes = soma(ab,faltamVaga), feitas = soma(ab,v=>preenchVaga(v).length);
   const kpis = `<div class="kpis">${kpi('Quadro previsto', num(prev,0))}${kpi('Quadro hoje', num(ativos,0), 'ativos + afastados')}
     ${kpi('Diferença (hoje − previsto)', dif>0?'+'+dif:String(dif), dif<0?`faltam ${-dif} pessoa(s)`:dif>0?'acima do previsto':'quadro completo')}
-    ${kpi('Vagas em aberto', ab.length, `${posicoes} posição(ões)`)}${kpi('Tempo médio em aberto', dAb.length?num(media,0)+' dias':'—', dAb.length?`mais antiga: ${Math.max(...dAb)} dias`:'')}
-    ${kpi('Tempo médio p/ preencher', tmp===null?'—':num(tmp,0)+' dias', fech.length?fech.length+' vaga(s) preenchida(s)':'nenhuma preenchida ainda')}</div>`;
+    ${kpi('Vagas em aberto', ab.length, `faltam ${posicoes} posição(ões)${feitas?` · ${feitas} já preenchida(s)`:''}`)}${kpi('Tempo médio em aberto', dAb.length?num(media,0)+' dias':'—', dAb.length?`mais antiga: ${Math.max(...dAb)} dias`:'')}
+    ${kpi('Tempo médio p/ preencher', tmp===null?'—':num(tmp,0)+' dias', tempos.length?`por posição · ${tempos.length} contratação(ões)`:'nenhuma preenchida ainda')}</div>`;
   const grafico = graficoVagas(true);
   const ent = (k, t) => `<div class="card"><h2>${t}</h2>${formHTML(k)}</div>
     <div class="card"><div class="filtros"><span class="info" style="margin:0">${k==='vagas'?'Todas as vagas (abertas primeiro)':'Quadro por função e turno'}</span><span style="flex:1"></span><button data-csv="${k}">Exportar CSV</button></div><div class="tabela-wrap">${tabelaEnt(k)}</div></div>`;
@@ -1336,6 +1369,12 @@ document.addEventListener('click', async e=>{
   else if(b.dataset.aba!==undefined && b.closest('nav.abas')){ est.aba=+b.dataset.aba; renderTudo(); }
   else if(b.dataset.editar){ const [k,id]=b.dataset.editar.split('|'); editarForm(k,id); }
   else if(b.dataset.excluir){ const [k,id]=b.dataset.excluir.split('|'); excluir(k,id); }
+  else if(b.dataset.preencher){ const v = L('vagas').find(x=>x.id===b.dataset.preencher); if(!v) return;
+    const d = document.querySelector(`[data-pdata="${v.id}"]`)?.value || hoje();
+    if(v.abertura && d < v.abertura){ alert('A data de preenchimento não pode ser antes da abertura da vaga.'); return; }
+    const o = ajustarVaga({ ...v, preench:[...preenchVaga(v), d], status: v.status==='Aberta' ? 'Em seleção' : v.status });
+    try{ await gravar('vagas', o); }catch(err){ alert('Não foi possível salvar: '+(err.message||err)); return; }
+    toast(o.status==='Preenchida' ? `Vaga ${v.numero} concluída: todas as ${qtdVaga(v)} posições preenchidas.` : `Vaga ${v.numero}: ${preenchVaga(o).length} de ${qtdVaga(o)} preenchidas.`); renderTudo(); }
   else if(b.dataset.limpar){ limparForm(b.dataset.limpar); }
   else if(b.dataset.csv){ exportarCSV(b.dataset.csv); }
   else if(b.dataset.csvtab){ exportarTabelaCSV(b.dataset.csvtab); }
