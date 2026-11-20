@@ -222,7 +222,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '4.2';
+const VERSAO = '4.3';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -280,7 +280,8 @@ function agrupa(lista, chave, valor){ const g={}; lista.forEach(r=>{ const k=cha
 
 /* ===================== LISTAS DE OPÇÕES ===================== */
 const OPT_COMB = ['Gasolina','Mistura 2T','Diesel S10','Diesel S500','Etanol','Elétrico','Não se aplica'];
-const TIPOS_EQ = ['Roçadeira Costal','Trator','Prensa','Empilhadeira','Caminhão','Veículo leve','Gerador','Outro'];
+const TIPOS_EQ = ['Trator','Roçadeira','Giro Zero','Roçadeira de Arraste'];
+const tipoEquip = r => r?.tipo==='Roçadeira Costal' ? 'Roçadeira' : (r?.tipo || '');   // 'Roçadeira Costal' antigo = Roçadeira
 const SIT_EQ = ['Operando','Em manutenção','Parado','Inativo / Condenada'];
 const TIPOS_OC = ['Falta','Falta justificada','Atestado','Atraso / saída antecipada','Hora extra 50%','Hora extra 100%','Férias','Afastamento','Folga / banco de horas'];
 const AUSENCIAS = ['Falta','Falta justificada','Atestado','Atraso / saída antecipada','Doença','Acidente de trabalho','Outro'];
@@ -360,11 +361,11 @@ const ENT = {
       return temHorario(c) ? `Jornada calculada: Seg a Qui ${hhmm(hSegQui(c))}/dia · Sexta ${hhmm(hSex(c))} · Semana ${hhmm(jSem(c))} (divisor ${num(jSem(c)*5,0)} h) · Sábado, domingo e feriado = hora extra` : 'Preencha os horários de seg a qui e de sexta para o sistema calcular a jornada (sábado, domingo e feriado viram hora extra).'; },
     cols:[col('Nome',r=>r.nome),col('Matrícula',r=>r.matricula),col('Função',r=>r.funcao),col('Admissão',r=>dataBR(r.admissao)),col('Telefone',r=>r.telefone),col('Turno',r=>r.turno||'Diurno'),col('Horário',r=>textoHorario(r)),col('Jornada/dia',r=>temHorario(r)?`${hhmm(hSegQui(r))} · sex ${hhmm(hSex(r))}`:hhmm(jDia(r)),{n:1}),col('Semana',r=>`${hhmm(jSem(r))} (÷${num(jSem(r)*5,0)})`,{n:1}),col('Valor/hora',r=>vHora(r)?brl(vHora(r)):'—',{n:1}),col('Situação',r=>sitTag(sitColab(r))+(sitColab(r)==='Afastado'&&r.dataAfast?`<div class="s">desde ${dataBR(r.dataAfast)}</div>`:''),{html:1})] },
 
-  equipamentos: { nome:'equipamento', titulo:r=>`${r.codigo}${r.controle?' (int. '+r.controle+')':''} – ${r.tipo}${r.modelo?' ('+r.modelo+')':''}`, ordem:(a,b)=>String(a.codigo).localeCompare(b.codigo), campos:[
+  equipamentos: { nome:'equipamento', titulo:r=>`${r.codigo}${r.controle?' (int. '+r.controle+')':''} – ${tipoEquip(r)}${r.modelo?' ('+r.modelo+')':''}`, ordem:(a,b)=>String(a.codigo).localeCompare(b.codigo), campos:[
       {k:'codigo',l:'Código / Patrimônio',req:1},{k:'controle',l:'Nº de controle interno'},{k:'tipo',l:'Tipo',t:'select',op:TIPOS_EQ},{k:'modelo',l:'Marca / Modelo'},{k:'placa',l:'Placa / Nº de série'},
       {k:'combustivel',l:'Combustível padrão',t:'select',op:OPT_COMB},{k:'horimetro',l:'Horímetro / Km atual',t:'number',step:'0.1'},{k:'situacao',l:'Situação',t:'select',op:SIT_EQ}],
-    paraForm:r=>({ situacao:sitEquip(r) }),
-    cols:[col('Código',r=>r.codigo),col('Nº controle interno',r=>r.controle),col('Tipo',r=>r.tipo),col('Modelo',r=>r.modelo),col('Placa / Série',r=>r.placa),col('Combustível',r=>r.combustivel),col('Horímetro',r=>r.horimetro?num(r.horimetro,1):'',{n:1}),col('Situação',r=>sitTag(sitEquip(r)),{html:1})] },
+    paraForm:r=>({ situacao:sitEquip(r), tipo:tipoEquip(r) }),
+    cols:[col('Código',r=>r.codigo),col('Nº controle interno',r=>r.controle),col('Tipo',r=>tipoEquip(r)),col('Modelo',r=>r.modelo),col('Placa / Série',r=>r.placa),col('Combustível',r=>r.combustivel),col('Horímetro',r=>r.horimetro?num(r.horimetro,1):'',{n:1}),col('Situação',r=>sitTag(sitEquip(r)),{html:1})] },
 
   quadro: { nome:'função no quadro', titulo:r=>`${r.funcao} – ${turnoDe(r)}`, ordem:(a,b)=>String(a.funcao).localeCompare(b.funcao) || turnoDe(a).localeCompare(turnoDe(b)), campos:[
       {k:'funcao',l:'Função',t:'list',op:funcoes,req:1},{k:'turno',l:'Turno',t:'select',op:['Diurno','Noturno']},{k:'previsto',l:'Quantidade prevista',t:'number',step:'1',req:1},{k:'obs',l:'Observação'}],
@@ -688,13 +689,13 @@ function telaEntidade(k){
 function resumoCombustivel(){
   const ab = doMes(L('abastecimentos'),'data'), ny = doMes(L('nylon'),'data'), os = doMes(L('ordens'),'inicio');
   const lit = soma(ab,r=>r.litros), custo = soma(ab,r=>(+r.litros||0)*(+r.valorLitro||0));
-  const porTipo = t => soma(ab.filter(a=>equip(a.equipId)?.tipo===t),r=>r.litros);
+  const porTipo = t => soma(ab.filter(a=>tipoEquip(equip(a.equipId))===t),r=>r.litros);
   const horas = soma(os,o=>horasEntre(o.inicio,o.fim)), hh = soma(os,o=>horasEntre(o.inicio,o.fim)*(+o.qtdColab||0));
-  return { ab, ny, os, lit, custo, roc:porTipo('Roçadeira Costal'), tra:porTipo('Trator'), nylon:soma(ny,r=>r.nylon), faca:soma(ny,r=>r.faca), horas, hh };
+  return { ab, ny, os, lit, custo, roc:porTipo('Roçadeira'), tra:porTipo('Trator'), giro:porTipo('Giro Zero'), arr:porTipo('Roçadeira de Arraste'), nylon:soma(ny,r=>r.nylon), faca:soma(ny,r=>r.faca), horas, hh };
 }
 function painelCombustivel(){
   const r = resumoCombustivel();
-  return `<div class="kpis">${kpi('Combustível', num(r.lit)+' L', r.custo?brl(r.custo):'sem valor informado')}${kpi('Roçadeiras costais', num(r.roc)+' L')}${kpi('Tratores', num(r.tra)+' L')}
+  return `<div class="kpis">${kpi('Combustível', num(r.lit)+' L', r.custo?brl(r.custo):'sem valor informado')}${kpi('Tratores', num(r.tra)+' L')}${kpi('Roçadeiras', num(r.roc)+' L')}${kpi('Giro Zero', num(r.giro)+' L')}${kpi('Roçadeiras de arraste', num(r.arr)+' L')}
     ${kpi('Nylon / Faca', `${num(r.nylon)} / ${num(r.faca,0)}`, r.ny.length+' lançamentos')}${kpi('Ordens de serviço', r.os.length, hhmm(r.horas)+' trabalhadas')}
     ${kpi('Homem-hora', num(r.hh), r.lit&&r.hh?num(r.lit/r.hh)+' L por homem-hora':'')}</div>
     <div class="grid2"><div class="card"><h2>Combustível por equipamento</h2><div class="tabela-wrap">${tabelaBarras(['Equipamento','Litros'], agrupa(r.ab,a=>nomeEquip(a.equipId),a=>a.litros), v=>num(v)+' L')}</div></div>
@@ -765,7 +766,7 @@ function resumoEquip(){
 }
 function painelEquip(){
   const r = resumoEquip();
-  const fora = r.eq.filter(e=>e.situacao!=='Operando').map(e=>`<tr><td>${esc(e.codigo)}</td><td>${esc(e.tipo)}</td><td>${esc(e.modelo)}</td><td>${sitTag(e.situacao)}</td></tr>`);
+  const fora = r.eq.filter(e=>e.situacao!=='Operando').map(e=>`<tr><td>${esc(e.codigo)}</td><td>${esc(tipoEquip(e))}</td><td>${esc(e.modelo)}</td><td>${sitTag(e.situacao)}</td></tr>`);
   const abertas = L('manutencoes').filter(m=>m.status!=='Concluída').sort((a,b)=>String(a.data).localeCompare(b.data)).map(m=>`<tr><td>${dataBR(m.data)}</td><td>${esc(nomeEquip(m.equipId))}</td><td>${esc(m.descricao)}</td><td>${sitTag(m.status)}</td></tr>`);
   return `<div class="kpis">${kpi('Equipamentos ativos', r.eq.length)}${kpi('Operando', r.operando, r.eq.length?num(r.operando/r.eq.length*100,0)+'% da frota':'')}${kpi('Em manutenção', r.manut)}${kpi('Parados', r.parado)}
     ${kpi('Manutenções abertas', r.abertas)}${kpi('Manutenções no período', r.mt.length, num(r.horas)+' h parado · '+brl(r.custo))}</div>
