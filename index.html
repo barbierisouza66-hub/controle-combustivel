@@ -100,6 +100,15 @@
   .kpi .v{font-size:23px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums}
   .kpi .r{font-size:12px;color:var(--muted)}
   .filtros{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  .gvagas{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+  .gvagas .gl{display:grid;grid-template-columns:minmax(160px,260px) 1fr 90px;gap:10px;align-items:center}
+  .gvagas .gn{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .gvagas .gb{height:16px;background:#f0f2f1;border-radius:4px;overflow:hidden}
+  .gvagas .gb i{display:block;height:100%;border-radius:4px}
+  .gvagas .gd{font-size:13px;text-align:right;line-height:1.15}
+  .gvagas .s,.faixas .s{font-size:11px;color:var(--muted)}
+  .faixas{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
+  .faixas i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
   .barra{height:8px;background:var(--pri2);border-radius:4px;overflow:hidden;min-width:80px}
   .barra i{display:block;height:100%;background:var(--pri)}
   .tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;background:var(--pri2);color:var(--pri)}
@@ -205,7 +214,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '3.5';
+const VERSAO = '3.6';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -286,6 +295,10 @@ const equip = id => L('equipamentos').find(e=>e.id===id);
 const nomeEquip = id => { const e=equip(id); return e ? e.codigo+(e.modelo?' – '+e.modelo:'') : '—'; };
 const turnoDe = r => r?.turno || 'Diurno';
 const chaveQ = r => `${r.funcao||'Sem função'}|${turnoDe(r)}`;   // quadro por função + turno
+const ativosQ = q => L('colaboradores').filter(c=>ativoColab(c)&&chaveQ(c)===chaveQ(q)).length;
+const difTag = d => d===0 ? tag('completo') : d<0 ? tag(String(d),'d') : tag('+'+d,'w');
+const vagaAberta = v => !['Preenchida','Cancelada'].includes(v.status||'Aberta');
+const diasVaga = v => !v.abertura ? 0 : Math.max(0, Math.round((new Date((vagaAberta(v)?hoje():(v.fechamento||hoje()))+'T12:00:00') - new Date(v.abertura+'T12:00:00'))/864e5));
 const funcoes = () => [...new Set([...FUNCOES_PADRAO, ...L('quadro').map(q=>q.funcao), ...L('colaboradores').map(c=>c.funcao)].filter(Boolean))];
 const materiais = () => [...new Set([...MATERIAIS_PADRAO, ...L('fardos').map(f=>f.material)].filter(Boolean))];
 const doMes = (lista, campo) => est.mes ? lista.filter(r=>String(r[campo]||'').slice(0,7)===est.mes) : lista;
@@ -332,7 +345,18 @@ const ENT = {
 
   quadro: { nome:'função no quadro', titulo:r=>`${r.funcao} – ${turnoDe(r)}`, ordem:(a,b)=>String(a.funcao).localeCompare(b.funcao) || turnoDe(a).localeCompare(turnoDe(b)), campos:[
       {k:'funcao',l:'Função',t:'list',op:funcoes,req:1},{k:'turno',l:'Turno',t:'select',op:['Diurno','Noturno']},{k:'previsto',l:'Quantidade prevista',t:'number',step:'1',req:1},{k:'obs',l:'Observação'}],
-    cols:[col('Função',r=>r.funcao),col('Turno',r=>turnoDe(r)),col('Previsto',r=>num(r.previsto,0),{n:1,tot:l=>num(soma(l,r=>r.previsto),0)}),col('Ativos hoje',r=>num(L('colaboradores').filter(c=>ativoColab(c)&&chaveQ(c)===chaveQ(r)).length,0),{n:1}),col('Observação',r=>r.obs)] },
+    cols:[col('Função',r=>r.funcao),col('Turno',r=>turnoDe(r)),col('Previsto',r=>num(r.previsto,0),{n:1,tot:l=>num(soma(l,r=>r.previsto),0)}),col('Ativos hoje',r=>num(ativosQ(r),0),{n:1,tot:l=>num(soma(l,ativosQ),0)}),col('Diferença (hoje − previsto)',r=>difTag(ativosQ(r)-(+r.previsto||0)),{n:1,html:1,tot:l=>{ const d=soma(l,ativosQ)-soma(l,r=>r.previsto); return d>0?'+'+d:String(d); }}),col('Observação',r=>r.obs)] },
+
+  vagas: { nome:'vaga em aberto', titulo:r=>`${r.numero} – ${r.nome}`, ordem:(a,b)=>(vagaAberta(b)-vagaAberta(a)) || String(a.abertura).localeCompare(String(b.abertura)), campos:[
+      {k:'numero',l:'Nº da vaga',req:1},{k:'nome',l:'Nome da vaga (função)',t:'list',op:funcoes,req:1},{k:'turno',l:'Turno',t:'select',op:['Diurno','Noturno']},
+      {k:'qtd',l:'Quantidade de posições',t:'number',step:'1',def:'1'},{k:'abertura',l:'Data de abertura',t:'date',req:1},
+      {k:'status',l:'Situação da vaga',t:'select',op:['Aberta','Em seleção','Preenchida','Cancelada']},
+      {k:'fechamento',l:'Data de fechamento',t:'date',semDef:1,se:o=>['Preenchida','Cancelada'].includes(o.status)},
+      {k:'motivo',l:'Motivo (substituição, aumento de quadro…)'},{k:'obs',l:'Observação / candidato'}],
+    validar:o=>['Preenchida','Cancelada'].includes(o.status) && !o.fechamento ? 'Informe a data de fechamento da vaga.' : (o.fechamento && o.abertura && o.fechamento < o.abertura ? 'A data de fechamento não pode ser antes da abertura.' : ''),
+    cols:[col('Nº',r=>r.numero),col('Vaga',r=>r.nome),col('Turno',r=>turnoDe(r)),col('Qtd',r=>num(+r.qtd||1,0),{n:1}),col('Abertura',r=>dataBR(r.abertura)),
+      col('Situação',r=>tag(r.status||'Aberta', vagaAberta(r)?(diasVaga(r)>60?'d':'w'):(r.status==='Preenchida'?'':'n')),{html:1}),col('Fechamento',r=>dataBR(r.fechamento)),
+      col('Dias em aberto',r=>num(diasVaga(r),0),{n:1}),col('Motivo',r=>r.motivo),col('Observação',r=>r.obs)] },
 
   ocorrencias: { nome:'ocorrência', data:'data', campos:[
       {k:'data',l:'Data',t:'date',req:1},{k:'colabId',l:'Colaborador',t:'ref',ent:'colaboradores',filtro:ativoColab,req:1},
@@ -412,13 +436,13 @@ function situacaoOc(r){
 const he50Oc = r => (+r.he50||0) + (r.tipo==='Hora extra 50%' ? (+r.horas||0) : 0);
 const he100Oc = r => (+r.he100||0) + (r.tipo==='Hora extra 100%' ? (+r.horas||0) : 0);
 const heOc = r => he50Oc(r) + he100Oc(r);
-const COLECOES_CONTRATO = ['colaboradores','equipamentos','quadro','ocorrencias','abastecimentos','nylon','ordens','manutencoes','fardos','frequencia'];
+const COLECOES_CONTRATO = ['colaboradores','equipamentos','quadro','vagas','ocorrencias','abastecimentos','nylon','ordens','manutencoes','fardos','frequencia'];
 
 /* ===================== MÓDULOS E ABAS ===================== */
 const MODULOS = [
   { id:'geral', nome:'Visão geral', abas:[ {nome:'Resumo do mês', painel:()=>painelGeral()} ] },
   { id:'combustivel', nome:'Combustível', abas:[ {nome:'Painel', painel:()=>painelCombustivel()}, {nome:'Abastecimento', ent:'abastecimentos'}, {nome:'Nylon e Faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'RH – Frequência', painel:()=>telaFrequencia(), depois:()=>prepFrequencia()}, {nome:'RH – Resumo do mês', painel:()=>painelFrequencia()} ] },
-  { id:'rh', nome:'RH', abas:[ {nome:'Painel', painel:()=>painelRH()}, {nome:'Ocorrências – calendário do mês', painel:()=>telaCalendarioRH(), depois:()=>prepCalendarioRH()}, {nome:'Quadro previsto', ent:'quadro'} ] },
+  { id:'rh', nome:'RH', abas:[ {nome:'Painel', painel:()=>painelRH()}, {nome:'Ocorrências – calendário do mês', painel:()=>telaCalendarioRH(), depois:()=>prepCalendarioRH()}, {nome:'Quadro previsto e vagas', painel:()=>telaQuadroVagas(), depois:()=>{ prepararForm('quadro'); prepararForm('vagas'); }} ] },
   { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', ent:'manutencoes'} ] },
   { id:'fardos', nome:'Produção de Fardos', abas:[ {nome:'Painel', painel:()=>painelFardos()}, {nome:'Lançar produção', ent:'fardos'} ] },
   { id:'cadastros', nome:'Cadastros', abas:[ {nome:'Colaboradores', ent:'colaboradores'}, {nome:'Equipamentos', ent:'equipamentos'} ] },
@@ -651,6 +675,27 @@ function resumoRH(){
   const he50 = soma(oc, he50Oc), he100 = soma(oc, he100Oc);
   const vagas = [...new Set(L('quadro').map(chaveQ))].reduce((n,ch)=>n+Math.max(0, soma(L('quadro').filter(q=>chaveQ(q)===ch),q=>q.previsto) - ativos.filter(c=>chaveQ(c)===ch).length),0);
   return { ativos, previsto, vagas, oc, ausH, abs, he50, he100, horasOc, faltas: soma(oc.filter(o=>o.tipo==='Falta'),r=>r.dias) };
+}
+function telaQuadroVagas(){
+  const q = L('quadro'), prev = soma(q,r=>r.previsto), ativos = soma(q,ativosQ), dif = ativos - prev;
+  const vs = L('vagas'), ab = vs.filter(vagaAberta), dAb = ab.map(diasVaga), fech = vs.filter(v=>v.status==='Preenchida' && v.fechamento);
+  const media = dAb.length ? soma(dAb,x=>x)/dAb.length : 0, tmp = fech.length ? soma(fech,diasVaga)/fech.length : null;
+  const posicoes = soma(ab,v=>+v.qtd||1);
+  const kpis = `<div class="kpis">${kpi('Quadro previsto', num(prev,0))}${kpi('Quadro hoje', num(ativos,0), 'ativos + afastados')}
+    ${kpi('Diferença (hoje − previsto)', dif>0?'+'+dif:String(dif), dif<0?`faltam ${-dif} pessoa(s)`:dif>0?'acima do previsto':'quadro completo')}
+    ${kpi('Vagas em aberto', ab.length, `${posicoes} posição(ões)`)}${kpi('Tempo médio em aberto', dAb.length?num(media,0)+' dias':'—', dAb.length?`mais antiga: ${Math.max(...dAb)} dias`:'')}
+    ${kpi('Tempo médio p/ preencher', tmp===null?'—':num(tmp,0)+' dias', fech.length?fech.length+' vaga(s) preenchida(s)':'nenhuma preenchida ainda')}</div>`;
+  // gráfico: tempo de cada vaga aberta, com faixas 0–30 / 31–60 / 61–90 / +90 dias
+  const ord = [...ab].sort((a,b)=>diasVaga(b)-diasVaga(a)), max = Math.max(30, ...dAb), cor = d => d>90?'var(--danger)':d>60?'#d97706':d>30?'#ca8a04':'var(--pri)';
+  const faixas = [['até 30 dias',d=>d<=30],['31 a 60',d=>d>30&&d<=60],['61 a 90',d=>d>60&&d<=90],['mais de 90',d=>d>90]].map(([n,f],i)=>[n, dAb.filter(f).length, ['var(--pri)','#ca8a04','#d97706','var(--danger)'][i]]);
+  const grafico = `<div class="card"><h2>Há quanto tempo as vagas estão em aberto</h2>
+    ${ab.length ? `<div class="faixas">${faixas.map(([n,c,co])=>`<div><i style="background:${co}"></i>${n}: <b>${c}</b></div>`).join('')}</div>
+    <div class="gvagas">${ord.map(v=>{ const d = diasVaga(v); return `<div class="gl"><div class="gn" title="${esc(v.obs||'')}"><b>${esc(v.numero)}</b> ${esc(v.nome)} <span class="s">${esc(turnoDe(v))}${(+v.qtd||1)>1?' · '+v.qtd+' posições':''}</span></div>
+      <div class="gb"><i style="width:${Math.max(2,d/max*100)}%;background:${cor(d)}"></i></div><div class="gd"><b>${d}</b> dias<div class="s">desde ${dataBR(v.abertura)}</div></div></div>`; }).join('')}</div>`
+      : '<p class="info" style="margin:0">Nenhuma vaga em aberto. Cadastre as vagas abaixo para acompanhar o tempo de abertura.</p>'}</div>`;
+  const ent = (k, t) => `<div class="card"><h2>${t}</h2>${formHTML(k)}</div>
+    <div class="card"><div class="filtros"><span class="info" style="margin:0">${k==='vagas'?'Todas as vagas (abertas primeiro)':'Quadro por função e turno'}</span><span style="flex:1"></span><button data-csv="${k}">Exportar CSV</button></div><div class="tabela-wrap">${tabelaEnt(k)}</div></div>`;
+  return kpis + grafico + ent('quadro','Quadro previsto: cadastrar função') + ent('vagas','Vagas em aberto: cadastrar vaga');
 }
 function painelRH(){
   const r = resumoRH();
