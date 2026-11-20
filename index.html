@@ -222,7 +222,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '4.0';
+const VERSAO = '4.1';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -359,10 +359,10 @@ const ENT = {
       return temHorario(c) ? `Jornada calculada: Seg a Qui ${hhmm(hSegQui(c))}/dia · Sexta ${hhmm(hSex(c))} · Semana ${hhmm(jSem(c))} (divisor ${num(jSem(c)*5,0)} h) · Sábado, domingo e feriado = hora extra` : 'Preencha os horários de seg a qui e de sexta para o sistema calcular a jornada (sábado, domingo e feriado viram hora extra).'; },
     cols:[col('Nome',r=>r.nome),col('Matrícula',r=>r.matricula),col('Função',r=>r.funcao),col('Admissão',r=>dataBR(r.admissao)),col('Telefone',r=>r.telefone),col('Turno',r=>r.turno||'Diurno'),col('Horário',r=>textoHorario(r)),col('Jornada/dia',r=>temHorario(r)?`${hhmm(hSegQui(r))} · sex ${hhmm(hSex(r))}`:hhmm(jDia(r)),{n:1}),col('Semana',r=>`${hhmm(jSem(r))} (÷${num(jSem(r)*5,0)})`,{n:1}),col('Valor/hora',r=>vHora(r)?brl(vHora(r)):'—',{n:1}),col('Situação',r=>sitTag(sitColab(r))+(sitColab(r)==='Afastado'&&r.dataAfast?`<div class="s">desde ${dataBR(r.dataAfast)}</div>`:''),{html:1})] },
 
-  equipamentos: { nome:'equipamento', titulo:r=>`${r.codigo} – ${r.tipo}${r.modelo?' ('+r.modelo+')':''}`, ordem:(a,b)=>String(a.codigo).localeCompare(b.codigo), campos:[
-      {k:'codigo',l:'Código / Patrimônio',req:1},{k:'tipo',l:'Tipo',t:'select',op:TIPOS_EQ},{k:'modelo',l:'Marca / Modelo'},{k:'placa',l:'Placa / Nº de série'},
+  equipamentos: { nome:'equipamento', titulo:r=>`${r.codigo}${r.controle?' (int. '+r.controle+')':''} – ${r.tipo}${r.modelo?' ('+r.modelo+')':''}`, ordem:(a,b)=>String(a.codigo).localeCompare(b.codigo), campos:[
+      {k:'codigo',l:'Código / Patrimônio',req:1},{k:'controle',l:'Nº de controle interno'},{k:'tipo',l:'Tipo',t:'select',op:TIPOS_EQ},{k:'modelo',l:'Marca / Modelo'},{k:'placa',l:'Placa / Nº de série'},
       {k:'combustivel',l:'Combustível padrão',t:'select',op:OPT_COMB},{k:'horimetro',l:'Horímetro / Km atual',t:'number',step:'0.1'},{k:'situacao',l:'Situação',t:'select',op:SIT_EQ}],
-    cols:[col('Código',r=>r.codigo),col('Tipo',r=>r.tipo),col('Modelo',r=>r.modelo),col('Placa / Série',r=>r.placa),col('Combustível',r=>r.combustivel),col('Horímetro',r=>r.horimetro?num(r.horimetro,1):'',{n:1}),col('Situação',r=>sitTag(r.situacao),{html:1})] },
+    cols:[col('Código',r=>r.codigo),col('Nº controle interno',r=>r.controle),col('Tipo',r=>r.tipo),col('Modelo',r=>r.modelo),col('Placa / Série',r=>r.placa),col('Combustível',r=>r.combustivel),col('Horímetro',r=>r.horimetro?num(r.horimetro,1):'',{n:1}),col('Situação',r=>sitTag(r.situacao),{html:1})] },
 
   quadro: { nome:'função no quadro', titulo:r=>`${r.funcao} – ${turnoDe(r)}`, ordem:(a,b)=>String(a.funcao).localeCompare(b.funcao) || turnoDe(a).localeCompare(turnoDe(b)), campos:[
       {k:'funcao',l:'Função',t:'list',op:funcoes,req:1},{k:'turno',l:'Turno',t:'select',op:['Diurno','Noturno']},{k:'previsto',l:'Quantidade prevista',t:'number',step:'1',req:1},{k:'obs',l:'Observação'}],
