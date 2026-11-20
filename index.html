@@ -205,7 +205,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '3.4';
+const VERSAO = '3.5';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -284,6 +284,8 @@ const ativoEquip = r => r.situacao !== 'Inativo';
 const nomeColab = id => L('colaboradores').find(c=>c.id===id)?.nome || '—';
 const equip = id => L('equipamentos').find(e=>e.id===id);
 const nomeEquip = id => { const e=equip(id); return e ? e.codigo+(e.modelo?' – '+e.modelo:'') : '—'; };
+const turnoDe = r => r?.turno || 'Diurno';
+const chaveQ = r => `${r.funcao||'Sem função'}|${turnoDe(r)}`;   // quadro por função + turno
 const funcoes = () => [...new Set([...FUNCOES_PADRAO, ...L('quadro').map(q=>q.funcao), ...L('colaboradores').map(c=>c.funcao)].filter(Boolean))];
 const materiais = () => [...new Set([...MATERIAIS_PADRAO, ...L('fardos').map(f=>f.material)].filter(Boolean))];
 const doMes = (lista, campo) => est.mes ? lista.filter(r=>String(r[campo]||'').slice(0,7)===est.mes) : lista;
@@ -328,9 +330,9 @@ const ENT = {
       {k:'combustivel',l:'Combustível padrão',t:'select',op:OPT_COMB},{k:'horimetro',l:'Horímetro / Km atual',t:'number',step:'0.1'},{k:'situacao',l:'Situação',t:'select',op:SIT_EQ}],
     cols:[col('Código',r=>r.codigo),col('Tipo',r=>r.tipo),col('Modelo',r=>r.modelo),col('Placa / Série',r=>r.placa),col('Combustível',r=>r.combustivel),col('Horímetro',r=>r.horimetro?num(r.horimetro,1):'',{n:1}),col('Situação',r=>sitTag(r.situacao),{html:1})] },
 
-  quadro: { nome:'função no quadro', titulo:r=>r.funcao, ordem:(a,b)=>String(a.funcao).localeCompare(b.funcao), campos:[
-      {k:'funcao',l:'Função',t:'list',op:funcoes,req:1},{k:'previsto',l:'Quantidade prevista',t:'number',step:'1',req:1},{k:'obs',l:'Observação'}],
-    cols:[col('Função',r=>r.funcao),col('Previsto',r=>num(r.previsto,0),{n:1,tot:l=>num(soma(l,r=>r.previsto),0)}),col('Ativos hoje',r=>num(L('colaboradores').filter(c=>ativoColab(c)&&c.funcao===r.funcao).length,0),{n:1}),col('Observação',r=>r.obs)] },
+  quadro: { nome:'função no quadro', titulo:r=>`${r.funcao} – ${turnoDe(r)}`, ordem:(a,b)=>String(a.funcao).localeCompare(b.funcao) || turnoDe(a).localeCompare(turnoDe(b)), campos:[
+      {k:'funcao',l:'Função',t:'list',op:funcoes,req:1},{k:'turno',l:'Turno',t:'select',op:['Diurno','Noturno']},{k:'previsto',l:'Quantidade prevista',t:'number',step:'1',req:1},{k:'obs',l:'Observação'}],
+    cols:[col('Função',r=>r.funcao),col('Turno',r=>turnoDe(r)),col('Previsto',r=>num(r.previsto,0),{n:1,tot:l=>num(soma(l,r=>r.previsto),0)}),col('Ativos hoje',r=>num(L('colaboradores').filter(c=>ativoColab(c)&&chaveQ(c)===chaveQ(r)).length,0),{n:1}),col('Observação',r=>r.obs)] },
 
   ocorrencias: { nome:'ocorrência', data:'data', campos:[
       {k:'data',l:'Data',t:'date',req:1},{k:'colabId',l:'Colaborador',t:'ref',ent:'colaboradores',filtro:ativoColab,req:1},
@@ -647,14 +649,14 @@ function resumoRH(){
   const horasPrev = ativos.length*diasUteis()*j;
   const abs = est.mes && horasPrev ? ausH/horasPrev*100 : null;
   const he50 = soma(oc, he50Oc), he100 = soma(oc, he100Oc);
-  const vagas = [...new Set(L('quadro').map(q=>q.funcao))].reduce((n,fn)=>n+Math.max(0, soma(L('quadro').filter(q=>q.funcao===fn),q=>q.previsto) - ativos.filter(c=>c.funcao===fn).length),0);
+  const vagas = [...new Set(L('quadro').map(chaveQ))].reduce((n,ch)=>n+Math.max(0, soma(L('quadro').filter(q=>chaveQ(q)===ch),q=>q.previsto) - ativos.filter(c=>chaveQ(c)===ch).length),0);
   return { ativos, previsto, vagas, oc, ausH, abs, he50, he100, horasOc, faltas: soma(oc.filter(o=>o.tipo==='Falta'),r=>r.dias) };
 }
 function painelRH(){
   const r = resumoRH();
-  const fs = [...new Set([...L('quadro').map(q=>q.funcao), ...r.ativos.map(c=>c.funcao||'Sem função')])].sort();
-  const linhasQ = fs.map(fn=>{ const p=soma(L('quadro').filter(q=>q.funcao===fn),q=>q.previsto), a=r.ativos.filter(c=>(c.funcao||'Sem função')===fn).length, d=a-p;
-    return `<tr><td>${esc(fn)}</td><td class="num">${num(p,0)}</td><td class="num">${num(a,0)}</td><td class="num">${d===0?tag('completo'):d<0?tag(d,'d'):tag('+'+d,'w')}</td></tr>`; });
+  const fs = [...new Set([...L('quadro').map(chaveQ), ...r.ativos.map(chaveQ)])].sort();
+  const linhasQ = fs.map(ch=>{ const [fn,tu] = ch.split('|'), p=soma(L('quadro').filter(q=>chaveQ(q)===ch),q=>q.previsto), a=r.ativos.filter(c=>chaveQ(c)===ch).length, d=a-p;
+    return `<tr><td>${esc(fn)}</td><td>${esc(tu)}</td><td class="num">${num(p,0)}</td><td class="num">${num(a,0)}</td><td class="num">${d===0?tag('completo'):d<0?tag(d,'d'):tag('+'+d,'w')}</td></tr>`; });
   const porColab = {};
   r.oc.forEach(o=>{ const p=porColab[o.colabId]=porColab[o.colabId]||{aus:0,faltas:0,he:0}; const h=r.horasOc(o);
     if(AUSENCIAS.includes(o.tipo)) p.aus+=h; if(o.tipo==='Falta') p.faltas+=(+o.dias||0); p.he += heOc(o); });
@@ -662,7 +664,7 @@ function painelRH(){
   return `<div class="kpis">${kpi('Efetivo ativo', r.ativos.length, 'previsto: '+num(r.previsto,0))}${kpi('Vagas em aberto', r.vagas, 'funções abaixo do previsto')}
     ${kpi('Absenteísmo', r.abs===null?'—':num(r.abs,1)+'%', r.abs===null?'escolha um mês':num(r.ausH)+' h de ausência')}${kpi('Faltas', num(r.faltas,1)+' dias')}
     ${kpi('Hora extra 50%', num(r.he50)+' h')}${kpi('Hora extra 100%', num(r.he100)+' h')}</div>
-    <div class="grid2"><div class="card"><h2>Quadro previsto x efetivo</h2><div class="tabela-wrap"><table><thead><tr><th>Função</th><th class="num">Previsto</th><th class="num">Ativos</th><th class="num">Diferença</th></tr></thead><tbody>${linhasQ.join('')||'<tr><td class="vazio" colspan="4">Cadastre o quadro previsto e os colaboradores.</td></tr>'}</tbody></table></div></div>
+    <div class="grid2"><div class="card"><h2>Quadro previsto x efetivo</h2><div class="tabela-wrap"><table><thead><tr><th>Função</th><th>Turno</th><th class="num">Previsto</th><th class="num">Ativos</th><th class="num">Diferença</th></tr></thead><tbody>${linhasQ.join('')||'<tr><td class="vazio" colspan="5">Cadastre o quadro previsto e os colaboradores.</td></tr>'}</tbody></table></div></div>
     <div class="card"><h2>Ocorrências por colaborador</h2><div class="tabela-wrap"><table><thead><tr><th>Colaborador</th><th class="num">Faltas (dias)</th><th class="num">Ausência (h)</th><th class="num">Hora extra (h)</th></tr></thead><tbody>${linhasC.join('')||'<tr><td class="vazio" colspan="4">Sem ocorrências no período.</td></tr>'}</tbody></table></div></div></div>
     <p class="info">Absenteísmo = horas de falta, falta justificada, atestado e atraso ÷ (efetivo ativo × ${diasUteis()} dias úteis × ${num(jornada())} h). Dias úteis e jornada são ajustados no cadastro do contrato.</p>`;
 }
