@@ -88,6 +88,9 @@
   .tabela-wrap{overflow-x:auto}
   table{width:100%;border-collapse:collapse;font-size:14px}
   th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+  tr.filtro th{padding:4px 4px 8px;text-transform:none;letter-spacing:0}
+  tr.filtro input{width:100%;min-width:70px;padding:4px 6px;font-size:12px;font-weight:400}
+  tr.filtro .s{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap}
   th{color:var(--muted);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.03em;background:#fafbfa}
   td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   tr.total td{font-weight:600;background:#fafbfa}
@@ -202,7 +205,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '3.2';
+const VERSAO = '3.3';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -582,13 +585,37 @@ function listaEnt(k){
   if(E.data) l = doMes(l, E.data);
   return l.sort(E.ordem || ((a,b)=>String(b[E.data]||'').localeCompare(String(a[E.data]||''))));
 }
+// Filtro rápido por coluna (ignora maiúsculas e acentos)
+const normF = t => String(t??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+const textoCel = (c, r) => { const v = c.v(r); return c.html ? String(v??'').replace(/<[^>]*>/g,' ') : String(v??''); };
 function tabelaEnt(k){
-  const E = ENT[k], l = listaEnt(k), cab = E.cols;
-  const linhas = l.map(r=>`<tr>${cab.map(c=>`<td class="${c.n?'num':''}">${c.html?c.v(r):esc(c.v(r))}</td>`).join('')}<td><button class="peq" data-editar="${k}|${r.id}">Editar</button> <button class="peq del" data-excluir="${k}|${r.id}">Excluir</button></td></tr>`);
-  if(l.length && cab.some(c=>c.tot)) linhas.push(`<tr class="total">${cab.map((c,i)=>`<td class="${c.n?'num':''}">${c.tot?esc(c.tot(l)):(i===0?'Total ('+l.length+')':'')}</td>`).join('')}<td></td></tr>`);
-  return `<table><thead><tr>${cab.map(c=>`<th class="${c.n?'num':''}">${c.l}</th>`).join('')}<th></th></tr></thead>
+  const E = ENT[k], l = listaEnt(k), cab = E.cols, fs = (est.filtros ||= {})[k] ||= [];
+  const passa = r => cab.every((c,i)=> !fs[i] || normF(textoCel(c,r)).includes(normF(fs[i])));
+  const vis = l.filter(passa).length;
+  const linhas = l.map(r=>`<tr ${passa(r)?'':'hidden'}>${cab.map(c=>`<td class="${c.n?'num':''}">${c.html?c.v(r):esc(c.v(r))}</td>`).join('')}<td><button class="peq" data-editar="${k}|${r.id}">Editar</button> <button class="peq del" data-excluir="${k}|${r.id}">Excluir</button></td></tr>`);
+  if(l.length && cab.some(c=>c.tot)) linhas.push(`<tr class="total" ${fs.some(Boolean)?'hidden':''}>${cab.map((c,i)=>`<td class="${c.n?'num':''}">${c.tot?esc(c.tot(l)):(i===0?'Total ('+l.length+')':'')}</td>`).join('')}<td></td></tr>`);
+  const opc = i => [...new Set(l.map(r=>textoCel(cab[i],r).replace(/\s+/g,' ').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR')).slice(0,60);
+  const filtros = l.length ? `<tr class="filtro">${cab.map((c,i)=>`<th><input type="search" data-fent="${k}" data-fcol="${i}" placeholder="Filtro" value="${esc(fs[i]||'')}" list="fl_${k}_${i}"><datalist id="fl_${k}_${i}">${opc(i).map(o=>`<option value="${esc(o)}">`).join('')}</datalist></th>`).join('')}
+    <th><button class="peq" data-limpafiltro="${k}" title="Limpar filtros" ${fs.some(Boolean)?'':'hidden'}>Limpar</button><div class="s" data-fcont="${k}">${fs.some(Boolean)?`${vis} de ${l.length}`:''}</div></th></tr>` : '';
+  return `<table data-tabent="${k}"><thead><tr>${cab.map(c=>`<th class="${c.n?'num':''}">${c.l}</th>`).join('')}<th></th></tr>${filtros}</thead>
     <tbody>${linhas.join('') || `<tr><td class="vazio" colspan="${cab.length+1}">Nenhum registro${E.data&&est.mes?' em '+mesBR(est.mes):''}.</td></tr>`}</tbody></table>`;
 }
+function aplicarFiltro(k){
+  const tb = document.querySelector(`table[data-tabent="${k}"]`); if(!tb) return;
+  const fs = est.filtros[k] = [...tb.querySelectorAll('[data-fcol]')].map(i=>i.value);
+  let vis = 0, tot = 0;
+  tb.querySelectorAll('tbody tr').forEach(tr=>{
+    if(tr.classList.contains('total')){ tr.hidden = fs.some(Boolean); return; }
+    if(tr.querySelector('.vazio')) return;
+    tot++; const ok = [...tr.children].every((td,i)=> !fs[i] || normF(td.textContent).includes(normF(fs[i]))); tr.hidden = !ok; if(ok) vis++;
+  });
+  const ativo = fs.some(Boolean);
+  tb.querySelector(`[data-fcont="${k}"]`).textContent = ativo ? `${vis} de ${tot}` : '';
+  tb.querySelector(`[data-limpafiltro="${k}"]`).hidden = !ativo;
+}
+document.addEventListener('input', e=>{ const k = e.target.dataset?.fent; if(k) aplicarFiltro(k); });
+document.addEventListener('click', e=>{ const b = e.target.closest?.('[data-limpafiltro]'); if(!b) return; const k = b.dataset.limpafiltro;
+  document.querySelectorAll(`[data-fent="${k}"]`).forEach(i=>i.value=''); aplicarFiltro(k); });
 function telaEntidade(k){
   const E = ENT[k];
   return `<div class="card"><h2>Novo: ${esc(E.nome)}</h2>${formHTML(k)}</div>
