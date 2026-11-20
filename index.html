@@ -222,7 +222,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '3.9';
+const VERSAO = '4.0';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -337,7 +337,7 @@ const ENT = {
   contratos: { nome:'contrato', titulo:r=>r.nome, campos:[
       {k:'nome',l:'Nome do contrato',req:1},{k:'cliente',l:'Cliente'},{k:'local',l:'Unidade / Local'},{k:'numero',l:'Nº do contrato'},
       {k:'inicio',l:'Início',t:'date'},{k:'fim',l:'Término',t:'date'},{k:'status',l:'Situação',t:'select',op:['Ativo','Suspenso','Encerrado']},
-      {k:'diasUteis',l:'Dias úteis por mês (RH)',t:'number',step:'1',def:'22'},{k:'jornada',l:'Jornada diária em horas (RH)',t:'number',step:'0.01',def:'8'},{k:'horasSemana',l:'Jornada semanal em horas (RH)',t:'number',step:'0.01',def:'44'},{k:'adicionalHE',l:'Adicional de HE dias úteis/sábado (%)',t:'number',step:'1',def:'50'},{k:'adicionalHE100',l:'Adicional de HE domingos e feriados (%)',t:'number',step:'1',def:'100'},{k:'feriadosExtras',l:'Feriados municipais/estaduais (dd/mm, separados por vírgula)'},{k:'folgaSemanal',l:'Folga semanal (dias abonados)',t:'select',op:['Sábado e domingo','Somente domingo']},{k:'regime',l:'Regime tributário da empresa',t:'select',op:['Lucro Real / Presumido','Simples Nacional (Anexos I, II, III e V)','Simples Nacional – Anexo IV']},{k:'ratPct',l:'RAT/SAT (%)',t:'number',step:'0.5',def:'3'},{k:'fap',l:'FAP (0,5 a 2,0)',t:'number',step:'0.0001',def:'1'},{k:'terceirosPct',l:'Terceiros (%)',t:'number',step:'0.1',def:'5.8'},{k:'fgtsPct',l:'FGTS (%)',t:'number',step:'0.1',def:'8'},
+      {k:'diasUteis',l:'Dias úteis por mês (RH)',t:'number',step:'1',def:'22'},{k:'jornada',l:'Jornada diária em horas (RH)',t:'number',step:'0.01',def:'8'},{k:'horasSemana',l:'Jornada semanal em horas (RH)',t:'number',step:'0.01',def:'44'},{k:'adicionalHE',l:'Adicional de HE dias úteis/sábado (%)',t:'number',step:'1',def:'50'},{k:'adicionalHE100',l:'Adicional de HE domingos e feriados (%)',t:'number',step:'1',def:'100'},{k:'feriadosExtras',l:'Feriados municipais/estaduais (dd/mm, separados por vírgula)'},{k:'folgaSemanal',l:'Folga semanal (dias abonados)',t:'select',op:['Sábado e domingo','Somente domingo']},{k:'diaPonto',l:'Período do ponto começa no dia (ex.: 11 = de 11 a 10 do mês seguinte)',t:'number',step:'1',def:'1'},{k:'regime',l:'Regime tributário da empresa',t:'select',op:['Lucro Real / Presumido','Simples Nacional (Anexos I, II, III e V)','Simples Nacional – Anexo IV']},{k:'ratPct',l:'RAT/SAT (%)',t:'number',step:'0.5',def:'3'},{k:'fap',l:'FAP (0,5 a 2,0)',t:'number',step:'0.0001',def:'1'},{k:'terceirosPct',l:'Terceiros (%)',t:'number',step:'0.1',def:'5.8'},{k:'fgtsPct',l:'FGTS (%)',t:'number',step:'0.1',def:'8'},
       {k:'modulos',l:'Módulos deste contrato',t:'multi',op:()=>MODULOS_OPCIONAIS,defTodos:1},{k:'obs',l:'Observações',t:'textarea'}] },
 
   colaboradores: { nome:'colaborador', titulo:r=>r.nome, ordem:(a,b)=>String(a.nome).localeCompare(b.nome), campos:[
@@ -937,6 +937,14 @@ function prepFrequencia(){
   if(est.freqVista==='mes') prepFreqMes(); else prepFreqDia();
 }
 function mesDaGrade(){ return est.mes || hoje().slice(0,7); }
+// Período de apuração do ponto: dia 1 = mês fechado; dia 11 = de 11/mês a 10/mês seguinte
+const diaPonto = () => Math.min(28, Math.max(1, Math.round(+contrato?.diaPonto || 1)));
+function periodoPonto(mes){
+  const dp = diaPonto(), ini = `${mes}-${String(dp).padStart(2,'0')}`;
+  const [y,m] = mes.split('-').map(Number), prox = new Date(y, m, 1), proxIni = `${prox.getFullYear()}-${String(prox.getMonth()+1).padStart(2,'0')}-${String(dp).padStart(2,'0')}`;
+  const fim = addDias(proxIni, -1), datas = []; for(let d = ini; d <= fim; d = addDias(d, 1)) datas.push(d);
+  return { ini, fim, datas, texto: dp===1 ? mesBR(mes) : `${dataBR(ini)} a ${dataBR(fim)}` };
+}
 function telaFreqMes(){
   const mes = mesDaGrade(), [y,m] = mes.split('-').map(Number), nDias = new Date(y, m, 0).getDate();
   const datas = Array.from({length:nDias}, (_,i)=>`${mes}-${String(i+1).padStart(2,'0')}`);
@@ -1130,18 +1138,18 @@ function telaCalendarioRH(){
     <div class="tabela-wrap">${tabelaEnt('ocorrencias')}</div></div>`;
   if(!colabs.length) return `<div class="card"><p style="margin:0">Cadastre os colaboradores em <b>Cadastros → Colaboradores</b> para usar o calendário.</p></div>` + lista;
   if(!colabs.some(c=>c.id===est.calColab)) est.calColab = colabs[0].id;
-  const cid = est.calColab, mes = mesDaGrade(), [y,m] = mes.split('-').map(Number), nDias = new Date(y, m, 0).getDate();
-  const c = colabs.find(x=>x.id===cid), primeiro = new Date(y, m-1, 1).getDay(), jSab = temHorario(c) || sabadoFolga() ? 0 : Math.max(0, +(jSem(c) - 5*jDia(c)).toFixed(2));
+  const cid = est.calColab, mes = mesDaGrade(), per = periodoPonto(mes);
+  const c = colabs.find(x=>x.id===cid), primeiro = new Date(per.ini+'T12:00:00').getDay(), jSab = temHorario(c) || sabadoFolga() ? 0 : Math.max(0, +(jSem(c) - 5*jDia(c)).toFixed(2));
   const cel = [];
   for(let i=0;i<primeiro;i++) cel.push('<div class="d fora"></div>');
-  for(let dia=1; dia<=nDias; dia++){
-    const d = `${mes}-${String(dia).padStart(2,'0')}`, dow = new Date(d+'T12:00:00').getDay(), fer = feriado(d), rec = ocDoDia(cid, d), x = rec ? situacaoOc(rec) : {};
+  for(const d of per.datas){
+    const dia = +d.slice(8), dow = new Date(d+'T12:00:00').getDay(), fer = feriado(d), rec = ocDoDia(cid, d), x = rec ? situacaoOc(rec) : {};
     const P = x.situacao==='Presença', A = x.situacao==='Ausência', AT = A && x.atestado==='Sim', jd = jornadaDoDia(c, d), abono = diaAbonado(d);
     const motivo = x.motivo || 'Falta', temHE = !!(rec?.heIni || rec?.heFim);
     const htBruto = rec && P ? (temHE ? (abono ? rec.horasTrab : (rec.htInf||'')) : (rec.horasTrab || ((he50Oc(rec)||he100Oc(rec)) ? jd + he50Oc(rec) + he100Oc(rec) : ''))) : '';
     const ht = htBruto === '' || htBruto === undefined ? '' : String(+(+htBruto).toFixed(2));
     cel.push(`<div class="d ${[0,6].includes(dow)||fer?'fds':''} ${fer?'fer':''} ${abono?'abonavel':''} ${d===hoje()?'hoje':''} ${P?'st-P':AT?'st-AT':A?'st-A':''}" data-d="${d}">
-      <div class="n">${dia} <small>${fer?`<span class="tag w" title="${esc(fer)}">Feriado</span>`:DIAS_CURTOS[dow]}</small></div>
+      <div class="n">${dia===1||d===per.ini?`${dia}/${d.slice(5,7)}`:dia} <small>${fer?`<span class="tag w" title="${esc(fer)}">Feriado</span>`:DIAS_CURTOS[dow]}</small></div>
       ${fer?`<div class="hecalc" style="margin-top:-2px">${esc(fer)}</div>`:''}
       ${abono?`<div class="abono" data-o="abono" ${P?'hidden':''}>✓ ${abono}</div>`:''}
       <label class="chk"><input type="checkbox" data-k="pres" ${P?'checked':''}> ${abono?'Trabalhou (hora extra)':'Presença'}</label>
@@ -1164,7 +1172,7 @@ function telaCalendarioRH(){
       <button id="calAnt" title="Colaborador anterior">◀</button>
       <select id="calColab" style="min-width:240px">${colabs.map(x=>`<option value="${x.id}" ${x.id===cid?'selected':''}>${esc(x.nome)}</option>`).join('')}</select>
       <button id="calProx" title="Próximo colaborador">▶</button>
-      <b>${mesBR(mes)}</b><span class="info" style="margin:0">${esc(c.funcao||'')}${c.funcao?' · ':''}${temHorario(c) ? `Seg–Qui ${c.sqEntrada}–${c.sqSaida} (${hhmm(hSegQui(c))}) · Sex ${c.sxEntrada}–${c.sxSaida} (${hhmm(hSex(c))}) · ${hhmm(jSem(c))}/semana · sáb, dom e feriado = HE` : `jornada ${num(jDia(c))} h seg–sex · sábado ${num(jSab)} h · ${num(jSem(c))} h/semana · <b>cadastre o horário do colaborador</b>`}</span><span style="flex:1"></span>
+      <b title="Período de apuração do ponto (ajuste no cadastro do contrato)">${per.texto}</b><span class="info" style="margin:0">${esc(c.funcao||'')}${c.funcao?' · ':''}${temHorario(c) ? `Seg–Qui ${c.sqEntrada}–${c.sqSaida} (${hhmm(hSegQui(c))}) · Sex ${c.sxEntrada}–${c.sxSaida} (${hhmm(hSex(c))}) · ${hhmm(jSem(c))}/semana · sáb, dom e feriado = HE` : `jornada ${num(jDia(c))} h seg–sex · sábado ${num(jSab)} h · ${num(jSem(c))} h/semana · <b>cadastre o horário do colaborador</b>`}</span><span style="flex:1"></span>
       <button id="calUteis">Marcar dias úteis vazios como Presença (até hoje)</button><button class="pri" id="calSalvar">Salvar mês</button></div>
     <div class="valorbox"><b>💰 Valor financeiro de ${esc(c.nome)}</b>
       <label>Salário mensal (R$) <input type="text" inputmode="decimal" id="calSal" value="${sal?fmtBR(+sal.toFixed(2)):''}" placeholder="Ex.: 2.400,00" autocomplete="off"></label>
