@@ -222,7 +222,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '4.1';
+const VERSAO = '4.2';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -281,7 +281,7 @@ function agrupa(lista, chave, valor){ const g={}; lista.forEach(r=>{ const k=cha
 /* ===================== LISTAS DE OPÇÕES ===================== */
 const OPT_COMB = ['Gasolina','Mistura 2T','Diesel S10','Diesel S500','Etanol','Elétrico','Não se aplica'];
 const TIPOS_EQ = ['Roçadeira Costal','Trator','Prensa','Empilhadeira','Caminhão','Veículo leve','Gerador','Outro'];
-const SIT_EQ = ['Operando','Em manutenção','Parado','Inativo'];
+const SIT_EQ = ['Operando','Em manutenção','Parado','Inativo / Condenada'];
 const TIPOS_OC = ['Falta','Falta justificada','Atestado','Atraso / saída antecipada','Hora extra 50%','Hora extra 100%','Férias','Afastamento','Folga / banco de horas'];
 const AUSENCIAS = ['Falta','Falta justificada','Atestado','Atraso / saída antecipada','Doença','Acidente de trabalho','Outro'];
 const MOTIVOS_AUS = ['Falta','Abonado','Falta justificada','Atraso / saída antecipada','Doença','Acidente de trabalho','Afastamento','Férias','Folga / banco de horas','Outro'];
@@ -297,7 +297,8 @@ const est = { mod:'geral', aba:0, mes:hoje().slice(0,7) };
 const L = k => db[k] || [];
 const sitColab = r => !r.ativo ? 'Ativo' : r.ativo==='Inativo' ? 'Desligado' : r.ativo;   // 'Inativo' antigo = Desligado
 const ativoColab = r => sitColab(r) !== 'Desligado';   // afastado continua na lista (RH acompanha)
-const ativoEquip = r => r.situacao !== 'Inativo';
+const sitEquip = r => r.situacao==='Inativo' ? 'Inativo / Condenada' : (r.situacao || 'Operando');   // 'Inativo' antigo = Inativo / Condenada
+const ativoEquip = r => sitEquip(r) !== 'Inativo / Condenada';
 const nomeColab = id => L('colaboradores').find(c=>c.id===id)?.nome || '—';
 const equip = id => L('equipamentos').find(e=>e.id===id);
 const nomeEquip = id => { const e=equip(id); return e ? e.codigo+(e.modelo?' – '+e.modelo:'') : '—'; };
@@ -329,7 +330,7 @@ const diasUteis = () => +contrato?.diasUteis || 22;
 
 /* ===================== ENTIDADES (cadastros e lançamentos) ===================== */
 const col = (l, v, o={}) => ({ l, v, ...o });
-const sitTag = s => tag(s||'—', s==='Operando'||s==='Ativo'||s==='Concluída' ? '' : s==='Em manutenção'||s==='Em andamento'||s==='Suspenso'||s==='Afastado' ? 'w' : s==='Parado'||s==='Aberta'||s==='Desligado' ? 'd' : 'n');
+const sitTag = s => tag(s||'—', s==='Operando'||s==='Ativo'||s==='Concluída' ? '' : s==='Em manutenção'||s==='Em andamento'||s==='Suspenso'||s==='Afastado' ? 'w' : s==='Parado'||s==='Aberta'||s==='Desligado'||s==='Inativo / Condenada' ? 'd' : 'n');
 
 const MODULOS_OPCIONAIS = [['combustivel','Combustível'],['rh','RH'],['equipamentos','Controle de Equipamentos'],['fardos','Produção de Fardos']];
 
@@ -362,7 +363,8 @@ const ENT = {
   equipamentos: { nome:'equipamento', titulo:r=>`${r.codigo}${r.controle?' (int. '+r.controle+')':''} – ${r.tipo}${r.modelo?' ('+r.modelo+')':''}`, ordem:(a,b)=>String(a.codigo).localeCompare(b.codigo), campos:[
       {k:'codigo',l:'Código / Patrimônio',req:1},{k:'controle',l:'Nº de controle interno'},{k:'tipo',l:'Tipo',t:'select',op:TIPOS_EQ},{k:'modelo',l:'Marca / Modelo'},{k:'placa',l:'Placa / Nº de série'},
       {k:'combustivel',l:'Combustível padrão',t:'select',op:OPT_COMB},{k:'horimetro',l:'Horímetro / Km atual',t:'number',step:'0.1'},{k:'situacao',l:'Situação',t:'select',op:SIT_EQ}],
-    cols:[col('Código',r=>r.codigo),col('Nº controle interno',r=>r.controle),col('Tipo',r=>r.tipo),col('Modelo',r=>r.modelo),col('Placa / Série',r=>r.placa),col('Combustível',r=>r.combustivel),col('Horímetro',r=>r.horimetro?num(r.horimetro,1):'',{n:1}),col('Situação',r=>sitTag(r.situacao),{html:1})] },
+    paraForm:r=>({ situacao:sitEquip(r) }),
+    cols:[col('Código',r=>r.codigo),col('Nº controle interno',r=>r.controle),col('Tipo',r=>r.tipo),col('Modelo',r=>r.modelo),col('Placa / Série',r=>r.placa),col('Combustível',r=>r.combustivel),col('Horímetro',r=>r.horimetro?num(r.horimetro,1):'',{n:1}),col('Situação',r=>sitTag(sitEquip(r)),{html:1})] },
 
   quadro: { nome:'função no quadro', titulo:r=>`${r.funcao} – ${turnoDe(r)}`, ordem:(a,b)=>String(a.funcao).localeCompare(b.funcao) || turnoDe(a).localeCompare(turnoDe(b)), campos:[
       {k:'funcao',l:'Função',t:'list',op:funcoes,req:1},{k:'turno',l:'Turno',t:'select',op:['Diurno','Noturno']},{k:'previsto',l:'Quantidade prevista',t:'number',step:'1',req:1},{k:'obs',l:'Observação'}],
@@ -525,7 +527,7 @@ async function excluir(k, id){
     if(count){ alert(`Este contrato tem ${count} registros. Para preservar o histórico, mude a situação para "Encerrado" em vez de excluir.`); return; }
   } else {
     const usos = COLECOES_CONTRATO.reduce((n,c)=>n+L(c).filter(r=>r.id!==id && Object.values(r).some(v=>v===id||(Array.isArray(v)&&v.includes(id)))).length,0);
-    if(usos){ alert(`Este cadastro é usado em ${usos} lançamento(s). Marque-o como ${k==='colaboradores'?'Desligado':'Inativo'} em vez de excluir.`); return; }
+    if(usos){ alert(`Este cadastro é usado em ${usos} lançamento(s). Marque-o como ${k==='colaboradores'?'Desligado':k==='equipamentos'?'Inativo / Condenada':'Inativo'} em vez de excluir.`); return; }
   }
   if(!confirm('Excluir este registro?')) return;
   carregando(true);
