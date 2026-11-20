@@ -107,6 +107,7 @@
   .gvagas .gb i{display:block;height:100%;border-radius:4px}
   .gvagas .gd{font-size:13px;text-align:right;line-height:1.15}
   .gvagas .s,.faixas .s{font-size:11px;color:var(--muted)}
+  .gvazio{border:2px dashed var(--line);border-radius:8px;padding:22px;text-align:center;color:var(--muted);font-size:14px;margin-top:6px}
   .faixas{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
   .faixas i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
   .barra{height:8px;background:var(--pri2);border-radius:4px;overflow:hidden;min-width:80px}
@@ -214,7 +215,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '3.6';
+const VERSAO = '3.7';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -676,6 +677,20 @@ function resumoRH(){
   const vagas = [...new Set(L('quadro').map(chaveQ))].reduce((n,ch)=>n+Math.max(0, soma(L('quadro').filter(q=>chaveQ(q)===ch),q=>q.previsto) - ativos.filter(c=>chaveQ(c)===ch).length),0);
   return { ativos, previsto, vagas, oc, ausH, abs, he50, he100, horasOc, faltas: soma(oc.filter(o=>o.tipo==='Falta'),r=>r.dias) };
 }
+function graficoVagas(naAba){
+  const ab = L('vagas').filter(vagaAberta), dAb = ab.map(diasVaga);
+  // gráfico: tempo de cada vaga aberta, com faixas 0–30 / 31–60 / 61–90 / +90 dias
+  const ord = [...ab].sort((a,b)=>diasVaga(b)-diasVaga(a)), max = Math.max(30, ...dAb), cor = d => d>90?'var(--danger)':d>60?'#d97706':d>30?'#ca8a04':'var(--pri)';
+  const faixas = [['até 30 dias',d=>d<=30],['31 a 60',d=>d>30&&d<=60],['61 a 90',d=>d>60&&d<=90],['mais de 90',d=>d>90]].map(([n,f],i)=>[n, dAb.filter(f).length, ['var(--pri)','#ca8a04','#d97706','var(--danger)'][i]]);
+  const grafico = `<div class="card"><h2>Há quanto tempo as vagas estão em aberto</h2>
+    ${ab.length ? `<div class="faixas">${faixas.map(([n,c,co])=>`<div><i style="background:${co}"></i>${n}: <b>${c}</b></div>`).join('')}</div>
+    <div class="gvagas">${ord.map(v=>{ const d = diasVaga(v); return `<div class="gl"><div class="gn" title="${esc(v.obs||'')}"><b>${esc(v.numero)}</b> ${esc(v.nome)} <span class="s">${esc(turnoDe(v))}${(+v.qtd||1)>1?' · '+v.qtd+' posições':''}</span></div>
+      <div class="gb"><i style="width:${Math.max(2,d/max*100)}%;background:${cor(d)}"></i></div><div class="gd"><b>${d}</b> dias<div class="s">desde ${dataBR(v.abertura)}</div></div></div>`; }).join('')}</div>`
+      : `<div class="gvazio">📊 O gráfico aparece aqui assim que houver <b>vaga com situação Aberta ou Em seleção</b>.<br>
+          ${naAba ? 'Cadastre a vaga no formulário <b>"Novo: vaga em aberto"</b> logo abaixo (Nº, nome, data de abertura).' : 'Cadastre em <b>RH → Quadro previsto e vagas</b>.'}
+          ${naAba ? '<br><button class="pri" style="margin-top:10px" onclick="document.getElementById(\'form_vagas\').scrollIntoView({behavior:\'smooth\'});document.querySelector(\'#form_vagas [name=numero]\').focus()">+ Cadastrar vaga</button>' : ''}</div>`}</div>`;
+  return grafico;
+}
 function telaQuadroVagas(){
   const q = L('quadro'), prev = soma(q,r=>r.previsto), ativos = soma(q,ativosQ), dif = ativos - prev;
   const vs = L('vagas'), ab = vs.filter(vagaAberta), dAb = ab.map(diasVaga), fech = vs.filter(v=>v.status==='Preenchida' && v.fechamento);
@@ -685,14 +700,7 @@ function telaQuadroVagas(){
     ${kpi('Diferença (hoje − previsto)', dif>0?'+'+dif:String(dif), dif<0?`faltam ${-dif} pessoa(s)`:dif>0?'acima do previsto':'quadro completo')}
     ${kpi('Vagas em aberto', ab.length, `${posicoes} posição(ões)`)}${kpi('Tempo médio em aberto', dAb.length?num(media,0)+' dias':'—', dAb.length?`mais antiga: ${Math.max(...dAb)} dias`:'')}
     ${kpi('Tempo médio p/ preencher', tmp===null?'—':num(tmp,0)+' dias', fech.length?fech.length+' vaga(s) preenchida(s)':'nenhuma preenchida ainda')}</div>`;
-  // gráfico: tempo de cada vaga aberta, com faixas 0–30 / 31–60 / 61–90 / +90 dias
-  const ord = [...ab].sort((a,b)=>diasVaga(b)-diasVaga(a)), max = Math.max(30, ...dAb), cor = d => d>90?'var(--danger)':d>60?'#d97706':d>30?'#ca8a04':'var(--pri)';
-  const faixas = [['até 30 dias',d=>d<=30],['31 a 60',d=>d>30&&d<=60],['61 a 90',d=>d>60&&d<=90],['mais de 90',d=>d>90]].map(([n,f],i)=>[n, dAb.filter(f).length, ['var(--pri)','#ca8a04','#d97706','var(--danger)'][i]]);
-  const grafico = `<div class="card"><h2>Há quanto tempo as vagas estão em aberto</h2>
-    ${ab.length ? `<div class="faixas">${faixas.map(([n,c,co])=>`<div><i style="background:${co}"></i>${n}: <b>${c}</b></div>`).join('')}</div>
-    <div class="gvagas">${ord.map(v=>{ const d = diasVaga(v); return `<div class="gl"><div class="gn" title="${esc(v.obs||'')}"><b>${esc(v.numero)}</b> ${esc(v.nome)} <span class="s">${esc(turnoDe(v))}${(+v.qtd||1)>1?' · '+v.qtd+' posições':''}</span></div>
-      <div class="gb"><i style="width:${Math.max(2,d/max*100)}%;background:${cor(d)}"></i></div><div class="gd"><b>${d}</b> dias<div class="s">desde ${dataBR(v.abertura)}</div></div></div>`; }).join('')}</div>`
-      : '<p class="info" style="margin:0">Nenhuma vaga em aberto. Cadastre as vagas abaixo para acompanhar o tempo de abertura.</p>'}</div>`;
+  const grafico = graficoVagas(true);
   const ent = (k, t) => `<div class="card"><h2>${t}</h2>${formHTML(k)}</div>
     <div class="card"><div class="filtros"><span class="info" style="margin:0">${k==='vagas'?'Todas as vagas (abertas primeiro)':'Quadro por função e turno'}</span><span style="flex:1"></span><button data-csv="${k}">Exportar CSV</button></div><div class="tabela-wrap">${tabelaEnt(k)}</div></div>`;
   return kpis + grafico + ent('quadro','Quadro previsto: cadastrar função') + ent('vagas','Vagas em aberto: cadastrar vaga');
@@ -709,6 +717,7 @@ function painelRH(){
   return `<div class="kpis">${kpi('Efetivo ativo', r.ativos.length, 'previsto: '+num(r.previsto,0))}${kpi('Vagas em aberto', r.vagas, 'funções abaixo do previsto')}
     ${kpi('Absenteísmo', r.abs===null?'—':num(r.abs,1)+'%', r.abs===null?'escolha um mês':num(r.ausH)+' h de ausência')}${kpi('Faltas', num(r.faltas,1)+' dias')}
     ${kpi('Hora extra 50%', num(r.he50)+' h')}${kpi('Hora extra 100%', num(r.he100)+' h')}</div>
+    ${graficoVagas(false)}
     <div class="grid2"><div class="card"><h2>Quadro previsto x efetivo</h2><div class="tabela-wrap"><table><thead><tr><th>Função</th><th>Turno</th><th class="num">Previsto</th><th class="num">Ativos</th><th class="num">Diferença</th></tr></thead><tbody>${linhasQ.join('')||'<tr><td class="vazio" colspan="5">Cadastre o quadro previsto e os colaboradores.</td></tr>'}</tbody></table></div></div>
     <div class="card"><h2>Ocorrências por colaborador</h2><div class="tabela-wrap"><table><thead><tr><th>Colaborador</th><th class="num">Faltas (dias)</th><th class="num">Ausência (h)</th><th class="num">Hora extra (h)</th></tr></thead><tbody>${linhasC.join('')||'<tr><td class="vazio" colspan="4">Sem ocorrências no período.</td></tr>'}</tbody></table></div></div></div>
     <p class="info">Absenteísmo = horas de falta, falta justificada, atestado e atraso ÷ (efetivo ativo × ${diasUteis()} dias úteis × ${num(jornada())} h). Dias úteis e jornada são ajustados no cadastro do contrato.</p>`;
