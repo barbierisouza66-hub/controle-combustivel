@@ -114,6 +114,12 @@
   .prog i.ok{background:var(--pri)}
   .preencher{display:flex;gap:4px;align-items:center;white-space:nowrap}
   .preencher input{width:130px;padding:3px 5px;font-size:12px}
+  table.docs td{vertical-align:top}
+  table.docs .docdatas{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0}
+  table.docs .docdatas label{font-size:11px;color:var(--muted);display:flex;flex-direction:column}
+  table.docs .docdatas input{padding:3px 5px;font-size:12px}
+  .btnarq{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;background:#fff}
+  .btnarq:hover{border-color:var(--pri)}
   .gvazio{border:2px dashed var(--line);border-radius:8px;padding:22px;text-align:center;color:var(--muted);font-size:14px;margin-top:6px}
   .faixas{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
   .faixas i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
@@ -222,7 +228,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '4.7';
+const VERSAO = '4.8';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -365,6 +371,7 @@ const ENT = {
       {k:'codigo',l:'Código / Patrimônio',req:1},{k:'controle',l:'Nº de controle interno'},{k:'tipo',l:'Tipo',t:'select',op:TIPOS_EQ},{k:'modelo',l:'Marca / Modelo'},{k:'placa',l:'Placa / Nº de série'},
       {k:'combustivel',l:'Combustível padrão',t:'select',op:OPT_COMB},{k:'horimetro',l:'Horímetro / Km atual',t:'number',step:'0.1'},{k:'situacao',l:'Situação',t:'select',op:SIT_EQ}],
     paraForm:r=>({ situacao:sitEquip(r), tipo:tipoEquip(r) }),
+    manter:['crlv','opac'],
     cols:[col('Código',r=>r.codigo),col('Nº controle interno',r=>r.controle),col('Tipo',r=>tipoEquip(r)),col('Modelo',r=>r.modelo),col('Placa / Série',r=>r.placa),col('Combustível',r=>r.combustivel),col('Horímetro',r=>r.horimetro?num(r.horimetro,1):'',{n:1}),col('Situação',r=>sitTag(sitEquip(r)),{html:1})] },
 
   quadro: { nome:'função no quadro', titulo:r=>`${r.funcao} – ${turnoDe(r)}`, ordem:(a,b)=>String(a.funcao).localeCompare(b.funcao) || turnoDe(a).localeCompare(turnoDe(b)), campos:[
@@ -479,7 +486,7 @@ const MODULOS = [
   { id:'geral', nome:'Visão geral', abas:[ {nome:'Resumo do mês', painel:()=>painelGeral()} ] },
   { id:'combustivel', nome:'Combustível', abas:[ {nome:'Painel', painel:()=>painelCombustivel()}, {nome:'Abastecimento', ent:'abastecimentos'}, {nome:'Nylon e Faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'RH – Frequência', painel:()=>telaFrequencia(), depois:()=>prepFrequencia()}, {nome:'RH – Resumo do mês', painel:()=>painelFrequencia()} ] },
   { id:'rh', nome:'RH', abas:[ {nome:'Painel', painel:()=>painelRH()}, {nome:'Ocorrências – calendário do mês', painel:()=>telaCalendarioRH(), depois:()=>prepCalendarioRH()}, {nome:'Quadro previsto e vagas', painel:()=>telaQuadroVagas(), depois:()=>{ prepararForm('quadro'); prepararForm('vagas'); }} ] },
-  { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', ent:'manutencoes'} ] },
+  { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', ent:'manutencoes'}, {nome:'Documentos – CRLV e opacidade', painel:()=>telaDocsEquip(), depois:()=>prepDocsEquip()} ] },
   { id:'fardos', nome:'Produção de Fardos', abas:[ {nome:'Painel', painel:()=>painelFardos()}, {nome:'Lançar produção', ent:'fardos'} ] },
   { id:'cadastros', nome:'Cadastros', abas:[ {nome:'Colaboradores', ent:'colaboradores'}, {nome:'Equipamentos', ent:'equipamentos'} ] },
 ];
@@ -592,6 +599,7 @@ function prepararForm(k){
     E.campos.forEach(c=>{ if(c.se && !c.se(o)) delete o[c.k]; });
     const msg = E.validar?.(o); if(msg){ alert(msg); return; }
     E.campos.filter(c=>c.t==='moeda').forEach(c=>{ if(o[c.k]!==undefined) o[c.k] = o[c.k]==='' ? '' : String(numBR(o[c.k])); });
+    if(E.manter && o.id){ const ant = L(k).find(x=>x.id===o.id); E.manter.forEach(m=>{ if(ant?.[m]!==undefined) o[m] = ant[m]; }); }   // documentos anexados etc.
     if(E.antesSalvar) o = E.antesSalvar(o);
     if(k!=='contratos' && !o.id) o.criadoPor = $('#usuarioEmail').textContent;
     try{ await gravar(k, o); }catch(err){ alert('Não foi possível salvar: '+(err.message||err)); return; }
@@ -763,6 +771,69 @@ function resumoEquip(){
   const eq = L('equipamentos').filter(ativoEquip), mt = doMes(L('manutencoes'),'data');
   const conta = s => eq.filter(e=>e.situacao===s).length;
   return { eq, mt, operando:conta('Operando'), manut:conta('Em manutenção'), parado:conta('Parado'), abertas:L('manutencoes').filter(m=>m.status!=='Concluída').length, horas:soma(mt,m=>m.horasParado), custo:soma(mt,m=>m.custo) };
+}
+/* ===== Documentos dos equipamentos (CRLV de todos; teste de opacidade dos caminhões) ===== */
+const BUCKET_DOCS = 'documentos';
+const DOCS = { crlv:{ nome:'CRLV', datas:[['venc','Vencimento / exercício']] }, opac:{ nome:'Teste de opacidade', datas:[['data','Data do teste'],['venc','Validade']] } };
+const precisaOpac = e => tipoEquip(e) === 'Caminhão';
+function statusDoc(d){
+  if(!d?.path) return { t:'Sem arquivo', c:'n', ord:3 };
+  if(!d.venc) return { t:'Enviado', c:'', ord:0 };
+  const dias = Math.round((new Date(d.venc+'T12:00:00') - new Date(hoje()+'T12:00:00'))/864e5);
+  return dias < 0 ? { t:`Vencido há ${-dias} dia(s)`, c:'d', ord:4 } : dias <= 30 ? { t:`Vence em ${dias} dia(s)`, c:'w', ord:2 } : { t:`Em dia até ${dataBR(d.venc)}`, c:'', ord:0 };
+}
+function celDoc(e, k){
+  const d = e[k] || {}, st = statusDoc(d);
+  return `<td class="doc" data-eq="${e.id}" data-doc="${k}">
+    <div>${tag(st.t, st.c)}</div>
+    ${d.path ? `<div class="s"><a href="#" data-verdoc="${e.id}|${k}">📄 ${esc(d.nome||'ver arquivo')}</a> · enviado ${dataBR(d.enviado)}</div>` : ''}
+    <div class="docdatas">${DOCS[k].datas.map(([c,l])=>`<label>${l}<input type="date" data-docdata="${c}" value="${esc(d[c]||'')}"></label>`).join('')}</div>
+    <label class="peq btnarq">${d.path?'Substituir arquivo':'Enviar arquivo'}<input type="file" accept="application/pdf,image/*" data-docarq hidden></label></td>`;
+}
+function telaDocsEquip(){
+  const eq = L('equipamentos').filter(ativoEquip).sort(ENT.equipamentos.ordem), cam = eq.filter(precisaOpac);
+  const venc = (lista, k) => lista.filter(e=>statusDoc(e[k]).ord===4).length, aVencer = (lista, k) => lista.filter(e=>statusDoc(e[k]).ord===2).length, sem = (lista, k) => lista.filter(e=>!e[k]?.path).length;
+  const kpis = `<div class="kpis">${kpi('CRLV enviados', `${eq.length - sem(eq,'crlv')} de ${eq.length}`, `${sem(eq,'crlv')} sem arquivo`)}${kpi('CRLV vencidos', venc(eq,'crlv'), `${aVencer(eq,'crlv')} vencem em até 30 dias`)}
+    ${kpi('Opacidade (caminhões)', `${cam.length - sem(cam,'opac')} de ${cam.length}`, `${sem(cam,'opac')} sem teste enviado`)}${kpi('Opacidade vencida', venc(cam,'opac'), `${aVencer(cam,'opac')} vencem em até 30 dias`)}</div>`;
+  if(!eq.length) return kpis + '<div class="card"><p style="margin:0">Cadastre os equipamentos em <b>Cadastros → Equipamentos</b>.</p></div>';
+  const linhas = eq.map(e=>`<tr><td><b>${esc(e.codigo)}</b>${e.controle?`<div class="s">int. ${esc(e.controle)}</div>`:''}</td><td>${esc(tipoEquip(e))}</td><td>${esc(e.placa||'')}</td>${celDoc(e,'crlv')}${precisaOpac(e)?celDoc(e,'opac'):'<td class="s">só para caminhões</td>'}</tr>`).join('');
+  return kpis + `<div class="card"><h2>CRLV e teste de opacidade por equipamento</h2>
+    <p class="info">Envie o arquivo em PDF ou foto (até 10 MB). Informe o vencimento para o sistema avisar quando estiver perto de vencer. As datas são salvas assim que você muda o campo.</p>
+    <div class="tabela-wrap"><table class="docs"><thead><tr><th>Equipamento</th><th>Tipo</th><th>Placa</th><th>CRLV</th><th>Teste de opacidade</th></tr></thead><tbody>${linhas}</tbody></table></div></div>`;
+}
+async function salvarDocEquip(eqId, k, mudancas){
+  const e = L('equipamentos').find(x=>x.id===eqId); if(!e) return false;
+  const o = { ...e, [k]: { ...(e[k]||{}), ...mudancas } };
+  try{ await gravar('equipamentos', o); return true; }catch(err){ alert('Não foi possível salvar: '+(err.message||err)); return false; }
+}
+function prepDocsEquip(){
+  const tb = document.querySelector('table.docs'); if(!tb) return;
+  tb.addEventListener('change', async ev=>{
+    const td = ev.target.closest('td.doc'); if(!td) return; const { eq, doc } = td.dataset;
+    if(ev.target.dataset.docdata){ if(await salvarDocEquip(eq, doc, { [ev.target.dataset.docdata]: ev.target.value })){ toast('Data salva.'); renderTudo(); } return; }
+    if(ev.target.dataset.docarq !== undefined){
+      const f = ev.target.files[0]; if(!f) return;
+      if(f.size > 10*1024*1024){ alert('Arquivo maior que 10 MB. Envie um PDF ou foto menor.'); ev.target.value=''; return; }
+      const ext = (f.name.split('.').pop()||'pdf').toLowerCase().replace(/[^a-z0-9]/g,''), path = `${contrato.id}/${eq}/${doc}-${Date.now()}.${ext}`;
+      carregando(true);
+      const { error } = await sb.storage.from(BUCKET_DOCS).upload(path, f, { upsert:false, contentType: f.type || undefined });
+      carregando(false);
+      if(error){ alert('Não foi possível enviar o arquivo: '+error.message); return; }
+      const ant = L('equipamentos').find(x=>x.id===eq)?.[doc]?.path;
+      if(await salvarDocEquip(eq, doc, { path, nome:f.name, enviado:hoje() })){
+        if(ant) sb.storage.from(BUCKET_DOCS).remove([ant]);   // apaga a versão anterior
+        toast(`${DOCS[doc].nome} enviado.`); renderTudo();
+      }
+    }
+  });
+  tb.addEventListener('click', async ev=>{
+    const a = ev.target.closest('[data-verdoc]'); if(!a) return; ev.preventDefault();
+    const [eq, doc] = a.dataset.verdoc.split('|'), d = L('equipamentos').find(x=>x.id===eq)?.[doc]; if(!d?.path) return;
+    const w = window.open('', '_blank');
+    const { data, error } = await sb.storage.from(BUCKET_DOCS).createSignedUrl(d.path, 600);
+    if(error){ w?.close(); alert('Não foi possível abrir o arquivo: '+error.message); return; }
+    if(w) w.location = data.signedUrl; else location.href = data.signedUrl;
+  });
 }
 function painelEquip(){
   const r = resumoEquip();
