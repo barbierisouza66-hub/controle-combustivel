@@ -222,7 +222,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '4.5';
+const VERSAO = '4.6';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -280,7 +280,7 @@ function agrupa(lista, chave, valor){ const g={}; lista.forEach(r=>{ const k=cha
 
 /* ===================== LISTAS DE OPÇÕES ===================== */
 const OPT_COMB = ['Gasolina','Mistura 2T','Diesel S10','Diesel S500','Etanol','Elétrico','Não se aplica'];
-const TIPOS_EQ = ['Trator','Roçadeira','Giro Zero','Roçadeira de Arraste – Simples','Roçadeira de Arraste – Dupla','Roçadeira de Arraste – Hidráulica'];
+const TIPOS_EQ = ['Trator','Roçadeira','Giro Zero','Roçadeira de Arraste – Simples','Roçadeira de Arraste – Dupla','Roçadeira de Arraste – Hidráulica','Motociclo'];
 const tipoEquip = r => r?.tipo==='Roçadeira Costal' ? 'Roçadeira' : (r?.tipo || '');   // 'Roçadeira Costal' antigo = Roçadeira
 const SIT_EQ = ['Operando','Em manutenção','Parado','Inativo / Condenada'];
 const TIPOS_OC = ['Falta','Falta justificada','Atestado','Atraso / saída antecipada','Hora extra 50%','Hora extra 100%','Férias','Afastamento','Folga / banco de horas'];
@@ -691,11 +691,11 @@ function resumoCombustivel(){
   const lit = soma(ab,r=>r.litros), custo = soma(ab,r=>(+r.litros||0)*(+r.valorLitro||0));
   const porTipo = t => soma(ab.filter(a=>tipoEquip(equip(a.equipId))===t),r=>r.litros);
   const horas = soma(os,o=>horasEntre(o.inicio,o.fim)), hh = soma(os,o=>horasEntre(o.inicio,o.fim)*(+o.qtdColab||0));
-  return { ab, ny, os, lit, custo, roc:porTipo('Roçadeira'), tra:porTipo('Trator'), giro:porTipo('Giro Zero'), arrS:porTipo('Roçadeira de Arraste – Simples')+porTipo('Roçadeira de Arraste'), arrD:porTipo('Roçadeira de Arraste – Dupla'), arrH:porTipo('Roçadeira de Arraste – Hidráulica'), nylon:soma(ny,r=>r.nylon), faca:soma(ny,r=>r.faca), horas, hh };
+  return { ab, ny, os, lit, custo, roc:porTipo('Roçadeira'), tra:porTipo('Trator'), giro:porTipo('Giro Zero'), arrS:porTipo('Roçadeira de Arraste – Simples')+porTipo('Roçadeira de Arraste'), arrD:porTipo('Roçadeira de Arraste – Dupla'), arrH:porTipo('Roçadeira de Arraste – Hidráulica'), moto:porTipo('Motociclo'), nylon:soma(ny,r=>r.nylon), faca:soma(ny,r=>r.faca), horas, hh };
 }
 function painelCombustivel(){
   const r = resumoCombustivel();
-  return `<div class="kpis">${kpi('Combustível', num(r.lit)+' L', r.custo?brl(r.custo):'sem valor informado')}${kpi('Tratores', num(r.tra)+' L')}${kpi('Roçadeiras', num(r.roc)+' L')}${kpi('Giro Zero', num(r.giro)+' L')}${kpi('Roçadeiras de arraste', num(r.arrS+r.arrD+r.arrH)+' L', `simples ${num(r.arrS)} L · dupla ${num(r.arrD)} L · hidráulica ${num(r.arrH)} L`)}
+  return `<div class="kpis">${kpi('Combustível', num(r.lit)+' L', r.custo?brl(r.custo):'sem valor informado')}${kpi('Tratores', num(r.tra)+' L')}${kpi('Roçadeiras', num(r.roc)+' L')}${kpi('Giro Zero', num(r.giro)+' L')}${kpi('Roçadeiras de arraste', num(r.arrS+r.arrD+r.arrH)+' L', `simples ${num(r.arrS)} L · dupla ${num(r.arrD)} L · hidráulica ${num(r.arrH)} L`)}${kpi('Motociclos', num(r.moto)+' L')}
     ${kpi('Nylon / Faca', `${num(r.nylon)} / ${num(r.faca,0)}`, r.ny.length+' lançamentos')}${kpi('Ordens de serviço', r.os.length, hhmm(r.horas)+' trabalhadas')}
     ${kpi('Homem-hora', num(r.hh), r.lit&&r.hh?num(r.lit/r.hh)+' L por homem-hora':'')}</div>
     <div class="grid2"><div class="card"><h2>Combustível por equipamento</h2><div class="tabela-wrap">${tabelaBarras(['Equipamento','Litros'], agrupa(r.ab,a=>nomeEquip(a.equipId),a=>a.litros), v=>num(v)+' L')}</div></div>
