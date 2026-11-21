@@ -248,7 +248,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '5.6';
+const VERSAO = '5.7';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -981,11 +981,78 @@ function telaLadoAr(){
   const barra = prev ? `<div class="dispbar" style="margin:10px 0 4px">${STATUS_LA.slice().reverse().map(s=>{ const v = m2(s); return v ? `<i style="width:${v/prev*100}%;background:${COR_LA[s]}" title="${s}: ${num(v,0)} m²">${pc(v)>=6?pc(v)+'%':''}</i>` : ''; }).join('')}</div>
     <div class="faixas" style="margin-bottom:10px">${STATUS_LA.slice().reverse().map(s=>`<div><i style="background:${COR_LA[s]}"></i>${s}: <b>${porSt(s).length}</b> área(s) · ${num(m2(s),0)} m²</div>`).join('')}</div>` : '';
   return `<div class="card"><div class="filtros"><h2 style="margin:0">Lado AR – andamento do ciclo</h2><span style="flex:1"></span>
-      ${opcoes?`<label style="flex-direction:row;align-items:center;gap:6px">Ciclo <select id="laCiclo">${opcoes}</select></label><button id="laNovoCiclo" title="Copia as áreas deste ciclo para o próximo mês, todas como Não executada">+ Novo ciclo</button>`:''}</div>
+      ${opcoes?`<label style="flex-direction:row;align-items:center;gap:6px">Ciclo <select id="laCiclo">${opcoes}</select></label><button id="laNovoCiclo" title="Copia as áreas deste ciclo para o próximo mês, todas como Não executada">+ Novo ciclo</button><button class="pri" id="laPDF" title="Gera o relatório gerencial deste ciclo em PDF">📄 Gerar PDF</button>`:''}</div>
     ${c ? kpis + barra + graficoLA(l, ini, fim) : '<p class="info">Cadastre as áreas do ciclo no formulário abaixo.</p>'}</div>` + telaEntidade('ladoar');
+}
+// ===== Relatório gerencial do Lado AR em PDF (gerado no navegador) =====
+const brN = (v, d=0) => Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:d, maximumFractionDigits:d});
+function grupoLA(loc){ const u = String(loc||'').toUpperCase(); return u.includes('AZUL')?'Azul':u.includes('AMARELO')?'Amarelo':u.includes('VIOLETA')?'Violeta':u.includes('PATIO')||u.includes('PÁTIO')?'Pátio':u.includes('PIER')||u.includes('PÍER')?'Píer':'Outros'; }
+function relatorioLAHTML(c){
+  const [ini, fim] = c.split('|'), l = L('ladoar').filter(r=>cicloLA(r)===c).sort(ENT.ladoar.ordem), h = hoje() < ini ? ini : hoje() > fim ? fim : hoje();
+  const prev = soma(l,r=>r.metragem) || 0, por = s => l.filter(r=>(r.status||'Não executada')===s), mE = soma(por('Executada'),r=>+r.metragemFinal||+r.metragem), mA = soma(por('Em andamento'),r=>r.metragem), mN = soma(por('Não executada'),r=>r.metragem);
+  const pc = v => prev ? brN(v/prev*100,1)+'%' : '—', dias = Math.round((new Date(fim+'T12:00:00')-new Date(ini+'T12:00:00'))/864e5)+1, dec = Math.round((new Date(h+'T12:00:00')-new Date(ini+'T12:00:00'))/864e5)+1;
+  const restam = Math.max(1, dias - dec + 1), ritmo = (prev - mE)/restam, metaHoje = dias>1 ? prev*(dec-1)/(dias-1) : prev;
+  const verde='#1f6f4a', lar='#d97706', verm='#b42318', mut='#5f6b65';
+  const box = (t,v,s,cor='#1d2420') => `<td style="width:25%;padding:0 4px"><div style="border:1px solid #dfe4e1;border-radius:6px;padding:7px 9px"><div style="font-size:10px;color:${mut}">${t}</div><div style="font-size:19px;font-weight:700;color:${cor};margin:2px 0">${v}</div><div style="font-size:9.5px;color:${mut}">${s}</div></div></td>`;
+  const seg = (v,cor) => v ? `<div style="width:${v/prev*100}%;background:${cor};color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center">${v/prev>.08?pc(v):''}</div>` : '';
+  const grupos = {}; l.forEach(r=>{ const g = grupos[grupoLA(r.localizacao)] ||= {E:0,A:0,N:0}; const st = r.status||'Não executada'; if(st==='Executada') g.E += +r.metragemFinal||+r.metragem; else if(st==='Em andamento') g.A += +r.metragem||0; else g.N += +r.metragem||0; });
+  const ordem = ['Azul','Amarelo','Violeta','Pátio','Píer','Outros'].filter(g=>grupos[g]), maxG = Math.max(1, ...ordem.map(g=>grupos[g].E+grupos[g].A+grupos[g].N));
+  const barrasG = ordem.map(g=>{ const x = grupos[g], t = x.E+x.A+x.N; return `<tr><td style="width:62px;font-size:10.5px;padding:3px 6px 3px 0;text-align:right">${g}</td><td style="padding:3px 0;width:430px"><div style="display:flex;height:14px;width:${Math.max(4,Math.round(t/maxG*420))}px">${[[x.E,verde],[x.A,lar],[x.N,verm]].map(([v,cr])=>v?`<div style="flex:${v};background:${cr}"></div>`:'').join('')}</div></td><td style="font-size:9.5px;color:${mut};white-space:nowrap;padding-left:6px">${brN(t/1000,1)} mil m² · ${t?brN(x.E/t*100,0):0}% executado</td></tr>`; }).join('');
+  const fundo = {'Executada':'#e6f2ec','Em andamento':'#fdf0e3','Não executada':'#fdecea'}, corSt = {'Executada':verde,'Em andamento':lar,'Não executada':verm};
+  const linhas = l.map(r=>{ const st = r.status||'Não executada'; return `<tr><td style="font-weight:700">${esc(r.area)}</td><td>${esc(r.localizacao||'')}</td><td style="text-align:right">${r.metragem?brN(r.metragem):'—'}</td><td style="background:${fundo[st]};color:${corSt[st]};font-weight:700">${st}</td><td style="text-align:right">${r.metragemFinal?brN(r.metragemFinal):''}</td></tr>`; }).join('');
+  const semM = l.filter(r=>!+r.metragem).map(r=>r.area);
+  const svg = graficoLA(l, ini, fim).split('<div class="faixas">')[0];
+  const th = 'style="background:#1f6f4a;color:#fff;text-align:left;padding:4px 6px;font-size:10px"';
+  return `<div id="relLA" style="width:760px;"><style>#relLA td,#relLA th{padding:3px 6px;text-transform:none;letter-spacing:0;font-weight:inherit;vertical-align:middle;border-bottom:1px solid #e6e9e7}#relLA table.semlinha td{border:none}#relLA .relTab td{font-size:9.5px}#relLA .relTab th{font-weight:700}</style><div style="width:760px;padding:10px 18px;font-family:Inter,Arial,sans-serif;color:#1d2420;background:#fff">
+    <div style="border-top:3px solid ${verde};padding-top:10px"><div style="font-size:22px;font-weight:700">Relatório Gerencial – Roçada Lado AR</div>
+    <div style="font-size:11.5px;color:${mut};margin-top:3px">Contrato ${esc(contrato.nome)} · Ciclo de ${dataBR(ini)} a ${dataBR(fim)} (${mesBR(fim.slice(0,7)).split(' de ')[0]}) · Posição em ${dataBR(hoje())}</div></div>
+    <table class="semlinha" style="width:100%;border-collapse:separate;margin:12px -4px 8px"><tr>${box('Metragem prevista no ciclo', brN(prev)+' m²', l.length+' áreas')}${box('Executada', brN(mE)+' m²', `${pc(mE)} · ${por('Executada').length} áreas`, verde)}${box('Em andamento', brN(mA)+' m²', `${pc(mA)} · ${por('Em andamento').length} áreas`, lar)}${box('Não executada', brN(mN)+' m²', `${pc(mN)} · ${por('Não executada').length} áreas`, verm)}</tr></table>
+    ${prev?`<div style="display:flex;height:22px;border-radius:4px;overflow:hidden">${seg(mE,verde)}${seg(mA,lar)}${seg(mN,verm)}</div>`:''}
+    <div style="font-size:14px;font-weight:700;margin:14px 0 4px">Resumo</div>
+    <p style="font-size:11.5px;line-height:1.5;margin:0 0 6px">Até ${dataBR(h).slice(0,5)}, ${dec} dos ${dias} dias do ciclo (${brN(dec/dias*100,0)}% do prazo), foram concluídas <b>${por('Executada').length} das ${l.length} áreas</b>, somando <b>${brN(mE)} m² (${pc(mE)} da metragem prevista)</b>. Outras <b>${por('Em andamento').length} áreas estão em andamento</b> (${brN(mA)} m²); concluídas, elevam o executado para <b>${brN(mE+mA)} m² (${pc(mE+mA)})</b>. Restam ${por('Não executada').length} áreas ainda não iniciadas, com ${brN(mN)} m².</p>
+    <p style="font-size:11.5px;line-height:1.5;margin:0">Para fechar o ciclo até ${dataBR(fim).slice(0,5)}, o ritmo necessário a partir de agora é de cerca de <b>${brN(ritmo)} m² por dia</b>. Pelo ritmo linear, a meta acumulada para ${dataBR(h).slice(0,5)} seria de ${brN(metaHoje)} m²; o executado está ${mE>=metaHoje?`<b>${brN(mE-metaHoje)} m² acima</b>`:`${brN(metaHoje-mE)} m² abaixo`} dessa referência.</p>
+    <div style="font-size:14px;font-weight:700;margin:14px 0 4px">Andamento do ciclo</div>
+    <div data-svg>${svg}</div>
+    <div style="font-size:9.5px;color:${mut};display:flex;gap:16px;margin-top:2px"><span><b style="color:#9aa5a0">– –</b> Meta (ritmo para fechar o ciclo)</span><span><b style="color:${verde}">——</b> Executada acumulada</span><span><b style="color:${lar}">▮</b> Em andamento (somado ao executado)</span></div>
+    <div style="font-size:14px;font-weight:700;margin:14px 0 4px">Situação por setor</div>
+    <table class="semlinha" style="border-collapse:collapse">${barrasG}</table>
+    <div style="font-size:9.5px;color:${mut};display:flex;gap:16px;margin-top:4px"><span><b style="color:${verde}">■</b> Executada</span><span><b style="color:${lar}">■</b> Em andamento</span><span><b style="color:${verm}">■</b> Não executada</span></div>
+    <div class="html2pdf__page-break"></div>
+    <div style="border-top:3px solid ${verde};padding-top:10px;font-size:14px;font-weight:700;margin-bottom:6px">Detalhamento por área</div>
+    <table style="width:100%;border-collapse:collapse;font-size:9.5px" class="relTab"><thead><tr><th ${th}>Área</th><th ${th}>Localização</th><th ${th}>Prevista (m²)</th><th ${th}>Status</th><th ${th}>Finalizada (m²)</th></tr></thead>
+      <tbody>${linhas}<tr style="background:#f3f5f4;font-weight:700"><td>Total</td><td></td><td style="text-align:right">${brN(prev)}</td><td></td><td style="text-align:right">${brN(mE)}</td></tr></tbody></table>
+    ${semM.length?`<p style="font-size:9.5px;color:${mut}">Observação: ${semM.join(', ')} sem metragem informada (não entra nos percentuais).</p>`:''}
+    <p style="font-size:9px;color:${mut};margin-top:10px">Gerado pelo SGC em ${new Date().toLocaleString('pt-BR')}.</p></div></div>`;
+}
+async function svgParaImagem(svgEl){
+  const xml = new XMLSerializer().serializeToString(svgEl).replace(/<svg([^>]*)>/, '<svg$1><style>text{font-family:Arial,Helvetica,sans-serif}</style>'), vb = svgEl.viewBox.baseVal, W = vb.width*2, H = vb.height*2;
+  const img = new Image(); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml.includes('xmlns=')?xml:xml.replace('<svg','<svg xmlns="http://www.w3.org/2000/svg"'));
+  await img.decode(); const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const cx = cv.getContext('2d'); cx.fillStyle='#fff'; cx.fillRect(0,0,W,H); cx.drawImage(img,0,0,W,H);
+  const out = new Image(); out.src = cv.toDataURL('image/png'); out.style.width = '100%'; await out.decode(); return out;
+}
+function carregarScript(src){ return new Promise((ok,erro)=>{ if([...document.scripts].some(s=>s.src===src)) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = erro; document.head.appendChild(s); }); }
+async function gerarPdfLA(somenteBlob){
+  const c = cicloAtualLA(); if(!c) return;
+  const [ini, fim] = c.split('|'), nome = `Relatorio_Lado_AR_${ini}_a_${fim}.pdf`;
+  const caixa = document.createElement('div'); caixa.style.cssText = 'position:fixed;left:-10000px;top:0'; caixa.innerHTML = relatorioLAHTML(c); document.body.appendChild(caixa);
+  carregando(true);
+  try{
+    const sv = caixa.querySelector('[data-svg] svg'); if(sv) sv.replaceWith(await svgParaImagem(sv));
+    await carregarScript('https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js');
+    const op = { margin:[8,8,10,8], filename:nome, image:{type:'jpeg',quality:0.95}, html2canvas:{scale:2,backgroundColor:'#fff'}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}, pagebreak:{mode:['css','legacy'], avoid:['tr','table:not(.relTab)']} };
+    const tarefa = html2pdf().set(op).from(caixa.firstElementChild);
+    if(somenteBlob) return await tarefa.outputPdf('blob');
+    await tarefa.save(); toast('PDF gerado: '+nome);
+  }catch(e){
+    console.error(e);
+    // plano B: abre o relatório para imprimir / "Salvar como PDF"
+    const w = window.open('', '_blank'); if(w){ w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${nome}</title><style>@page{size:A4;margin:10mm} .html2pdf__page-break{page-break-before:always}</style></head><body>${caixa.innerHTML}</body></html>`); w.document.close(); setTimeout(()=>w.print(), 500); }
+    else alert('Não foi possível gerar o PDF: '+(e.message||e));
+  }finally{ carregando(false); caixa.remove(); }
 }
 function prepLadoAr(){
   prepararForm('ladoar');
+  $('#laPDF')?.addEventListener('click', ()=>gerarPdfLA());
   $('#laCiclo')?.addEventListener('change', e=>{ est.cicloLA = e.target.value; renderTudo(); });
   document.querySelectorAll('[data-lastatus]').forEach(s=>s.addEventListener('change', async ()=>{
     const r = L('ladoar').find(x=>x.id===s.dataset.lastatus); if(!r) return;
