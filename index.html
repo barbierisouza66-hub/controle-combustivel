@@ -128,6 +128,17 @@
   .disptipos .db{display:flex;height:18px;border-radius:4px;overflow:hidden;min-width:24px}
   .disptipos .db i{font-size:11px}
   .disptipos .dt{text-align:right;color:var(--muted)}
+  .lli{display:grid;grid-template-columns:120px repeat(7,minmax(110px,1fr));gap:5px;margin-top:10px}
+  .lli .lcab{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;text-align:center}
+  .lli .lsem{font-size:12px;display:flex;flex-direction:column;gap:3px;padding:6px 4px}
+  .lli .ld{border:1px solid var(--line);border-radius:8px;padding:5px 6px;min-height:70px;background:#fff;display:flex;flex-direction:column;gap:4px}
+  .lli .ld.fora{background:transparent;border:none}
+  .lli .ld.hoje{border-color:var(--pri);box-shadow:inset 0 0 0 1px var(--pri)}
+  .lli .ld .n{font-weight:600;font-size:13px}
+  .lli .lf{border-radius:6px;padding:4px 5px;font-size:12px;display:flex;flex-direction:column;gap:2px;background:#f4f6f5}
+  .lli .lf.s-ok{background:var(--pri2)} .lli .lf.s-nao{background:var(--danger2)} .lli .lf.s-pend{background:var(--warn2)}
+  .lli .lf input[type=text]{font-size:11.5px;padding:3px 4px}
+  .lcfg{display:grid;grid-template-columns:80px 1fr;align-items:center;gap:6px;font-size:13px;margin:3px 0}
   .gvazio{border:2px dashed var(--line);border-radius:8px;padding:22px;text-align:center;color:var(--muted);font-size:14px;margin-top:6px}
   .faixas{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
   .faixas i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
@@ -236,7 +247,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '5.1';
+const VERSAO = '5.2';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -351,7 +362,7 @@ const sitTag = s => tag(s||'—', s==='Operando'||s==='Ativo'||s==='Concluída' 
 const MODULOS_OPCIONAIS = [['combustivel','Combustível'],['rh','RH'],['equipamentos','Controle de Equipamentos'],['fardos','Produção de Fardos']];
 
 const ENT = {
-  contratos: { nome:'contrato', titulo:r=>r.nome, campos:[
+  contratos: { nome:'contrato', titulo:r=>r.nome, manter:['lli'], campos:[
       {k:'nome',l:'Nome do contrato',req:1},{k:'cliente',l:'Cliente'},{k:'local',l:'Unidade / Local'},{k:'numero',l:'Nº do contrato'},
       {k:'inicio',l:'Início',t:'date'},{k:'fim',l:'Término',t:'date'},{k:'status',l:'Situação',t:'select',op:['Ativo','Suspenso','Encerrado']},
       {k:'diasUteis',l:'Dias úteis por mês (RH)',t:'number',step:'1',def:'22'},{k:'jornada',l:'Jornada diária em horas (RH)',t:'number',step:'0.01',def:'8'},{k:'horasSemana',l:'Jornada semanal em horas (RH)',t:'number',step:'0.01',def:'44'},{k:'adicionalHE',l:'Adicional de HE dias úteis/sábado (%)',t:'number',step:'1',def:'50'},{k:'adicionalHE100',l:'Adicional de HE domingos e feriados (%)',t:'number',step:'1',def:'100'},{k:'feriadosExtras',l:'Feriados municipais/estaduais (dd/mm, separados por vírgula)'},{k:'folgaSemanal',l:'Folga semanal (dias abonados)',t:'select',op:['Sábado e domingo','Somente domingo']},{k:'diaPonto',l:'Período do ponto começa no dia (ex.: 11 = de 11 a 10 do mês seguinte)',t:'number',step:'1',def:'1'},{k:'regime',l:'Regime tributário da empresa',t:'select',op:['Lucro Real / Presumido','Simples Nacional (Anexos I, II, III e V)','Simples Nacional – Anexo IV']},{k:'ratPct',l:'RAT/SAT (%)',t:'number',step:'0.5',def:'3'},{k:'fap',l:'FAP (0,5 a 2,0)',t:'number',step:'0.0001',def:'1'},{k:'terceirosPct',l:'Terceiros (%)',t:'number',step:'0.1',def:'5.8'},{k:'fgtsPct',l:'FGTS (%)',t:'number',step:'0.1',def:'8'},
@@ -495,14 +506,14 @@ function situacaoOc(r){
 const he50Oc = r => (+r.he50||0) + (r.tipo==='Hora extra 50%' ? (+r.horas||0) : 0);
 const he100Oc = r => (+r.he100||0) + (r.tipo==='Hora extra 100%' ? (+r.horas||0) : 0);
 const heOc = r => he50Oc(r) + he100Oc(r);
-const COLECOES_CONTRATO = ['colaboradores','equipamentos','custos','quadro','vagas','ocorrencias','abastecimentos','nylon','ordens','manutencoes','fardos','frequencia'];
+const COLECOES_CONTRATO = ['colaboradores','equipamentos','custos','lli','quadro','vagas','ocorrencias','abastecimentos','nylon','ordens','manutencoes','fardos','frequencia'];
 
 /* ===================== MÓDULOS E ABAS ===================== */
 const MODULOS = [
   { id:'geral', nome:'Visão geral', abas:[ {nome:'Resumo do mês', painel:()=>painelGeral()} ] },
   { id:'combustivel', nome:'Combustível', abas:[ {nome:'Painel', painel:()=>painelCombustivel()}, {nome:'Abastecimento', ent:'abastecimentos'}, {nome:'Nylon e Faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'RH – Frequência', painel:()=>telaFrequencia(), depois:()=>prepFrequencia()}, {nome:'RH – Resumo do mês', painel:()=>painelFrequencia()} ] },
   { id:'rh', nome:'RH', abas:[ {nome:'Painel', painel:()=>painelRH()}, {nome:'Ocorrências – calendário do mês', painel:()=>telaCalendarioRH(), depois:()=>prepCalendarioRH()}, {nome:'Quadro previsto e vagas', painel:()=>telaQuadroVagas(), depois:()=>{ prepararForm('quadro'); prepararForm('vagas'); }} ] },
-  { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', painel:()=>graficoDispEquip() + telaEntidade('manutencoes'), depois:()=>prepararForm('manutencoes')}, {nome:'Documentos – CRLV e opacidade', painel:()=>telaDocsEquip(), depois:()=>prepDocsEquip()}, {nome:'Custos por equipamento', painel:()=>telaCustosEquip(), depois:()=>prepararForm('custos')} ] },
+  { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', painel:()=>graficoDispEquip() + telaEntidade('manutencoes'), depois:()=>prepararForm('manutencoes')}, {nome:'Documentos – CRLV e opacidade', painel:()=>telaDocsEquip(), depois:()=>prepDocsEquip()}, {nome:'Custos por equipamento', painel:()=>telaCustosEquip(), depois:()=>prepararForm('custos')}, {nome:'LLI', painel:()=>telaLLI(), depois:()=>prepLLI()} ] },
   { id:'fardos', nome:'Produção de Fardos', abas:[ {nome:'Painel', painel:()=>painelFardos()}, {nome:'Lançar produção', ent:'fardos'} ] },
   { id:'cadastros', nome:'Cadastros', abas:[ {nome:'Colaboradores', ent:'colaboradores'}, {nome:'Equipamentos', ent:'equipamentos'} ] },
 ];
@@ -615,7 +626,7 @@ function prepararForm(k){
     E.campos.forEach(c=>{ if(c.se && !c.se(o)) delete o[c.k]; });
     const msg = E.validar?.(o); if(msg){ alert(msg); return; }
     E.campos.filter(c=>c.t==='moeda').forEach(c=>{ if(o[c.k]!==undefined) o[c.k] = o[c.k]==='' ? '' : String(numBR(o[c.k])); });
-    if(E.manter && o.id){ const ant = L(k).find(x=>x.id===o.id); E.manter.forEach(m=>{ if(ant?.[m]!==undefined) o[m] = ant[m]; }); }   // documentos anexados etc.
+    if(E.manter && o.id){ const ant = (k==='contratos' ? contratos : L(k)).find(x=>x.id===o.id); E.manter.forEach(m=>{ if(ant?.[m]!==undefined) o[m] = ant[m]; }); }   // documentos anexados etc.
     if(E.antesSalvar) o = E.antesSalvar(o);
     if(k!=='contratos' && !o.id) o.criadoPor = $('#usuarioEmail').textContent;
     try{ await gravar(k, o); }catch(err){ alert('Não foi possível salvar: '+(err.message||err)); return; }
@@ -850,6 +861,67 @@ function prepDocsEquip(){
     const { data, error } = await sb.storage.from(BUCKET_DOCS).createSignedUrl(d.path, 600);
     if(error){ w?.close(); alert('Não foi possível abrir o arquivo: '+error.message); return; }
     if(w) w.location = data.signedUrl; else location.href = data.signedUrl;
+  });
+}
+/* ===== LLI: escalas A/B bissemanais por frota, com calendário e registro de realização ===== */
+// Dias: 1=seg ... 5=sex, 6=sáb, 0=dom. Semana de referência (segunda-feira) e a escala dela; depois alterna A/B toda semana.
+const LLI_PADRAO = { ref:'2026-01-05', refEscala:'B',
+  A:{ 2:['060-U012'], 3:['075-U013'], 4:['011-C013','075-U024'], 5:['060-U011'] },
+  B:{ 2:['060-U014'], 4:['011-C038'] } };
+const DIAS_LLI = [[1,'Segunda'],[2,'Terça'],[3,'Quarta'],[4,'Quinta'],[5,'Sexta'],[6,'Sábado'],[0,'Domingo']];
+const cfgLLI = () => contrato?.lli || LLI_PADRAO;
+function escalaLLI(d){
+  const c = cfgLLI(), seg = semanaDe(d)[0], ref = semanaDe(c.ref)[0];
+  const n = Math.round((new Date(seg+'T12:00:00') - new Date(ref+'T12:00:00'))/(7*864e5));
+  return Math.abs(n) % 2 === 0 ? c.refEscala : (c.refEscala==='A' ? 'B' : 'A');
+}
+function semanaISO(d){ const x = new Date(d+'T12:00:00'); x.setDate(x.getDate() + 3 - (x.getDay()+6)%7); const a = new Date(x.getFullYear(),0,4); return 1 + Math.round(((x - a)/864e5 - 3 + (a.getDay()+6)%7)/7); }
+const frotasLLI = d => (cfgLLI()[escalaLLI(d)]?.[new Date(d+'T12:00:00').getDay()] || []).filter(Boolean);
+const idLLI = (d, f) => `lli_${d}_${f}`.replace(/[^\w-]/g,'_');
+const recLLI = (d, f) => L('lli').find(r=>r.id===idLLI(d,f));
+function statusLLI(d, f){ const r = recLLI(d,f); return r?.realizada ? 'ok' : r?.motivo ? 'nao' : d <= hoje() ? 'pend' : 'fut'; }
+function telaLLI(){
+  const mes = mesDaGrade(), [y,m] = mes.split('-').map(Number), ini = `${mes}-01`, fim = addDias(`${m===12?y+1:y}-${String(m===12?1:m+1).padStart(2,'0')}-01`, -1);
+  const prev = []; for(let d = ini; d <= fim; d = addDias(d,1)) frotasLLI(d).forEach(f=>prev.push([d,f]));
+  const st = prev.map(([d,f])=>statusLLI(d,f)), n = k => st.filter(x=>x===k).length, ateHoje = prev.filter(([d])=>d<=hoje()).length;
+  const kpis = `<div class="kpis">${kpi('LLI previstas no mês', prev.length, ateHoje+' até hoje')}${kpi('Realizadas', n('ok'), ateHoje?Math.round(n('ok')/ateHoje*100)+'% das previstas até hoje':'')}
+    ${kpi('Não realizadas', n('nao'), 'com motivo informado')}${kpi('Pendentes', n('pend'), 'dias passados sem registro')}</div>`;
+  const semanas = []; for(let s0 = semanaDe(ini)[0]; s0 <= fim; s0 = addDias(s0,7)) semanas.push(s0);
+  const cel = d => { if(d < ini || d > fim) return '<div class="ld fora"></div>';
+    const fs = frotasLLI(d);
+    return `<div class="ld ${d===hoje()?'hoje':''}"><div class="n">${+d.slice(8)}</div>${fs.map(f=>{ const r = recLLI(d,f)||{}, s = statusLLI(d,f);
+      return `<div class="lf s-${s}" data-d="${d}" data-f="${esc(f)}"><b>${esc(f)}</b>
+        <label class="chk"><input type="checkbox" data-lli="ok" ${r.realizada?'checked':''}> Realizada</label>
+        <input type="text" data-lli="motivo" placeholder="Motivo (se não realizada)" value="${esc(r.motivo||'')}" ${r.realizada || s==='fut' && !r.motivo ? 'hidden' : ''}></div>`; }).join('') || '<div class="s">—</div>'}</div>`; };
+  const grade = semanas.map(s0=>`<div class="lsem"><b>Semana ${semanaISO(s0)}</b><span class="tag ${escalaLLI(s0)==='A'?'':'w'}">Escala ${escalaLLI(s0)}</span><div class="s">${dataBR(s0)} a ${dataBR(addDias(s0,6))}</div></div>`
+    + Array.from({length:7},(_,i)=>cel(addDias(s0,i))).join('')).join('');
+  const naoReal = prev.filter(([d,f])=>statusLLI(d,f)==='nao').map(([d,f])=>`<tr><td>${dataBR(d)}</td><td>${esc(f)}</td><td>Escala ${escalaLLI(d)}</td><td>${esc(recLLI(d,f).motivo)}</td></tr>`).join('');
+  const c = cfgLLI(), cfgTab = esc_ => ['A','B'].map(E=>`<div><h3 style="margin:8px 0">Escala ${E}</h3>${DIAS_LLI.map(([dw,nm])=>`<label class="lcfg">${nm}<input type="text" data-cfg="${E}|${dw}" value="${esc((c[E]?.[dw]||[]).join(', '))}" placeholder="frotas separadas por vírgula"></label>`).join('')}</div>`).join('');
+  return kpis + `<div class="card"><div class="filtros"><h2 style="margin:0">LLI – ${mesBR(mes)}</h2><span style="flex:1"></span><span class="info" style="margin:0">troque o mês no seletor do topo · marque “Realizada”; se não foi feita, escreva o motivo</span></div>
+    <div class="lli"><div class="lcab"></div>${['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'].map(x=>`<div class="lcab">${x}</div>`).join('')}${grade}</div>
+    <p class="info"><span class="tag">Realizada</span> <span class="tag d">Não realizada</span> <span class="tag w">Pendente (dia passado sem registro)</span> · cada marcação é salva na hora.</p></div>
+    ${naoReal?`<div class="card"><h2>LLI não realizadas no mês</h2><div class="tabela-wrap"><table><thead><tr><th>Data</th><th>Frota</th><th>Escala</th><th>Motivo</th></tr></thead><tbody>${naoReal}</tbody></table></div></div>`:''}
+    <details class="card"><summary>Configurar escalas A e B (frotas por dia da semana)</summary>
+      <p class="info">A escala alterna toda semana (bissemanal). Semana de referência: <input type="date" id="lliRef" value="${esc(c.ref)}"> é a
+        <select id="lliRefEsc"><option ${c.refEscala==='A'?'selected':''}>A</option><option ${c.refEscala==='B'?'selected':''}>B</option></select> (ex.: 05/01/2026 = Escala B, semana 2).</p>
+      <div class="grid2">${cfgTab()}</div><button class="pri" id="lliSalvarCfg" style="margin-top:10px">Salvar escalas</button></details>`;
+}
+async function salvarLLI(d, f, mud){
+  const ant = recLLI(d,f) || { id:idLLI(d,f), data:d, frota:f, criadoPor:$('#usuarioEmail').textContent };
+  const o = { ...ant, escala: escalaLLI(d), ...mud };
+  try{ await gravar('lli', o); return true; }catch(e){ alert('Não foi possível salvar: '+(e.message||e)); return false; }
+}
+function prepLLI(){
+  const g = document.querySelector('.lli'); if(!g) return;
+  g.addEventListener('change', async ev=>{
+    const b = ev.target.closest('.lf'); if(!b) return; const { d, f } = b.dataset;
+    if(ev.target.dataset.lli==='ok'){ const ok = ev.target.checked; if(await salvarLLI(d, f, ok ? { realizada:true, motivo:'' } : { realizada:false })){ toast(ok?`LLI ${f} realizada.`:`LLI ${f} desmarcada.`); renderTudo(); } }
+    if(ev.target.dataset.lli==='motivo'){ if(await salvarLLI(d, f, { realizada:false, motivo:ev.target.value.trim() })){ toast('Motivo salvo.'); renderTudo(); } }
+  });
+  $('#lliSalvarCfg')?.addEventListener('click', async ()=>{
+    const nova = { ref: $('#lliRef').value || LLI_PADRAO.ref, refEscala: $('#lliRefEsc').value, A:{}, B:{} };
+    document.querySelectorAll('[data-cfg]').forEach(i=>{ const [E,dw] = i.dataset.cfg.split('|'), l = i.value.split(/[,;]+/).map(x=>x.trim()).filter(Boolean); if(l.length) nova[E][dw] = l; });
+    try{ await gravar('contratos', { ...contrato, lli:nova }); toast('Escalas salvas.'); renderTudo(); }catch(e){ alert('Não foi possível salvar: '+(e.message||e)); }
   });
 }
 // Custos por equipamento: combustível (abastecimentos) + manutenções + outros custos lançados à parte
