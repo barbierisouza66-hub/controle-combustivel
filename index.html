@@ -247,7 +247,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '5.4';
+const VERSAO = '5.5';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -359,7 +359,7 @@ const diasUteis = () => +contrato?.diasUteis || 22;
 const col = (l, v, o={}) => ({ l, v, ...o });
 const sitTag = s => tag(s||'—', s==='Operando'||s==='Ativo'||s==='Concluída' ? '' : s==='Em manutenção'||s==='Em andamento'||s==='Suspenso'||s==='Afastado' ? 'w' : s==='Parado'||s==='Aberta'||s==='Desligado'||s==='Inativo / Condenada' ? 'd' : 'n');
 
-const MODULOS_OPCIONAIS = [['combustivel','Combustível'],['rh','RH'],['equipamentos','Controle de Equipamentos']];   // Produção de Fardos retirada (os lançamentos antigos continuam guardados no banco)
+const MODULOS_OPCIONAIS = [['combustivel','Operação'],['rh','RH'],['equipamentos','Controle de Equipamentos']];   // Produção de Fardos retirada (os lançamentos antigos continuam guardados no banco)
 
 const ENT = {
   contratos: { nome:'contrato', titulo:r=>r.nome, manter:['lli'], campos:[
@@ -511,7 +511,7 @@ const COLECOES_CONTRATO = ['colaboradores','equipamentos','custos','lli','quadro
 /* ===================== MÓDULOS E ABAS ===================== */
 const MODULOS = [
   { id:'geral', nome:'Visão geral', abas:[ {nome:'Resumo do mês', painel:()=>painelGeral()} ] },
-  { id:'combustivel', nome:'Combustível', abas:[ {nome:'Painel', painel:()=>painelCombustivel()}, {nome:'Abastecimento', ent:'abastecimentos'}, {nome:'Nylon e Faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'} ] },   // abas de RH retiradas do Combustível (o RH fica no módulo RH)
+  { id:'combustivel', nome:'Operação', abas:[ {nome:'Painel', painel:()=>painelCombustivel()}, {nome:'Abastecimento', ent:'abastecimentos'}, {nome:'Nylon e Faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'} ] },   // abas de RH retiradas do Combustível (o RH fica no módulo RH)
   { id:'rh', nome:'RH', abas:[ {nome:'Painel', painel:()=>painelRH()}, {nome:'Ocorrências – calendário do mês', painel:()=>telaCalendarioRH(), depois:()=>prepCalendarioRH()}, {nome:'Quadro previsto e vagas', painel:()=>telaQuadroVagas(), depois:()=>{ prepararForm('quadro'); prepararForm('vagas'); }} ] },
   { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', painel:()=>graficoDispEquip() + telaEntidade('manutencoes'), depois:()=>prepararForm('manutencoes')}, {nome:'Documentos – CRLV e opacidade', painel:()=>telaDocsEquip(), depois:()=>prepDocsEquip()}, {nome:'Custos por equipamento', painel:()=>telaCustosEquip(), depois:()=>prepararForm('custos')}, {nome:'LLI', painel:()=>telaLLI(), depois:()=>prepLLI()} ] },
   { id:'cadastros', nome:'Cadastros', abas:[ {nome:'Colaboradores', ent:'colaboradores'}, {nome:'Equipamentos', ent:'equipamentos'} ] },
@@ -990,7 +990,7 @@ function painelFardos(){
 function painelGeral(){
   const ids = modulosDoContrato().map(m=>m.id);
   let h = '';
-  if(ids.includes('combustivel')){ const r=resumoCombustivel(); h+=`<h3>Combustível</h3><div class="kpis">${kpi('Combustível', num(r.lit)+' L', r.custo?brl(r.custo):'')}${kpi('Nylon / Faca', `${num(r.nylon)} / ${num(r.faca,0)}`)}${kpi('Ordens de serviço', r.os.length, num(r.hh)+' homem-hora')}</div>`; }
+  if(ids.includes('combustivel')){ const r=resumoCombustivel(); h+=`<h3>Operação</h3><div class="kpis">${kpi('Combustível', num(r.lit)+' L', r.custo?brl(r.custo):'')}${kpi('Nylon / Faca', `${num(r.nylon)} / ${num(r.faca,0)}`)}${kpi('Ordens de serviço', r.os.length, num(r.hh)+' homem-hora')}</div>`; }
   if(ids.includes('rh')){ const r=resumoRH(); h+=`<h3>RH</h3><div class="kpis">${kpi('Efetivo ativo / previsto', `${r.ativos.length} / ${num(r.previsto,0)}`)}${kpi('Absenteísmo', r.abs===null?'—':num(r.abs,1)+'%')}${kpi('Horas extras', num(r.he50+r.he100)+' h', `50%: ${num(r.he50)} h · 100%: ${num(r.he100)} h`)}</div>`; }
   if(ids.includes('equipamentos')){ const r=resumoEquip(); h+=`<h3>Equipamentos</h3><div class="kpis">${kpi('Operando', `${r.operando} de ${r.eq.length}`)}${kpi('Manutenções abertas', r.abertas)}${kpi('Custo de manutenção', brl(r.custo), num(r.horas)+' h parado')}</div>`; }
   if(ids.includes('fardos')){ const r=resumoFardos(); h+=`<h3>Produção de fardos</h3><div class="kpis">${kpi('Fardos', num(r.q,0))}${kpi('Peso total', num(r.p/1000,2)+' t')}${kpi('Peso médio', r.media?num(r.media,1)+' kg/fardo':'—')}</div>`; }
