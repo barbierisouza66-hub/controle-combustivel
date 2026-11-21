@@ -247,7 +247,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '5.2';
+const VERSAO = '5.3';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -359,7 +359,7 @@ const diasUteis = () => +contrato?.diasUteis || 22;
 const col = (l, v, o={}) => ({ l, v, ...o });
 const sitTag = s => tag(s||'—', s==='Operando'||s==='Ativo'||s==='Concluída' ? '' : s==='Em manutenção'||s==='Em andamento'||s==='Suspenso'||s==='Afastado' ? 'w' : s==='Parado'||s==='Aberta'||s==='Desligado'||s==='Inativo / Condenada' ? 'd' : 'n');
 
-const MODULOS_OPCIONAIS = [['combustivel','Combustível'],['rh','RH'],['equipamentos','Controle de Equipamentos'],['fardos','Produção de Fardos']];
+const MODULOS_OPCIONAIS = [['combustivel','Combustível'],['rh','RH'],['equipamentos','Controle de Equipamentos']];   // Produção de Fardos retirada (os lançamentos antigos continuam guardados no banco)
 
 const ENT = {
   contratos: { nome:'contrato', titulo:r=>r.nome, manter:['lli'], campos:[
@@ -514,7 +514,6 @@ const MODULOS = [
   { id:'combustivel', nome:'Combustível', abas:[ {nome:'Painel', painel:()=>painelCombustivel()}, {nome:'Abastecimento', ent:'abastecimentos'}, {nome:'Nylon e Faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'RH – Frequência', painel:()=>telaFrequencia(), depois:()=>prepFrequencia()}, {nome:'RH – Resumo do mês', painel:()=>painelFrequencia()} ] },
   { id:'rh', nome:'RH', abas:[ {nome:'Painel', painel:()=>painelRH()}, {nome:'Ocorrências – calendário do mês', painel:()=>telaCalendarioRH(), depois:()=>prepCalendarioRH()}, {nome:'Quadro previsto e vagas', painel:()=>telaQuadroVagas(), depois:()=>{ prepararForm('quadro'); prepararForm('vagas'); }} ] },
   { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', painel:()=>graficoDispEquip() + telaEntidade('manutencoes'), depois:()=>prepararForm('manutencoes')}, {nome:'Documentos – CRLV e opacidade', painel:()=>telaDocsEquip(), depois:()=>prepDocsEquip()}, {nome:'Custos por equipamento', painel:()=>telaCustosEquip(), depois:()=>prepararForm('custos')}, {nome:'LLI', painel:()=>telaLLI(), depois:()=>prepLLI()} ] },
-  { id:'fardos', nome:'Produção de Fardos', abas:[ {nome:'Painel', painel:()=>painelFardos()}, {nome:'Lançar produção', ent:'fardos'} ] },
   { id:'cadastros', nome:'Cadastros', abas:[ {nome:'Colaboradores', ent:'colaboradores'}, {nome:'Equipamentos', ent:'equipamentos'} ] },
 ];
 const modulosDoContrato = () => { const m = contrato?.modulos?.length ? contrato.modulos : MODULOS_OPCIONAIS.map(x=>x[0]); return MODULOS.filter(x=>x.id==='geral'||x.id==='cadastros'||m.includes(x.id)); };
@@ -1544,7 +1543,7 @@ function telaContratos(){
   $('#barraContrato').hidden = true; $('#navMods').hidden = true; $('#btnContratos').hidden = true; $('#btnBackup').hidden = true;
   const ordem = {Ativo:0,Suspenso:1,Encerrado:2};
   const cards = [...contratos].sort((a,b)=>(ordem[a.status]??0)-(ordem[b.status]??0)||String(a.nome).localeCompare(b.nome)).map(c=>{
-    const mods = (c.modulos?.length?c.modulos:MODULOS_OPCIONAIS.map(m=>m[0])).map(id=>tag(MODULOS_OPCIONAIS.find(m=>m[0]===id)?.[1]||id,'n')).join('');
+    const mods = (c.modulos?.length?c.modulos:MODULOS_OPCIONAIS.map(m=>m[0])).filter(id=>MODULOS_OPCIONAIS.some(m=>m[0]===id)).map(id=>tag(MODULOS_OPCIONAIS.find(m=>m[0]===id)?.[1]||id,'n')).join('');
     return `<div class="contrato"><div class="t">${esc(c.nome)}</div><div class="s">${esc([c.cliente,c.local].filter(Boolean).join(' · '))}${c.numero?' · Nº '+esc(c.numero):''}</div>
       <div>${sitTag(c.status||'Ativo')}${c.inicio?` <span class="s">${dataBR(c.inicio)}${c.fim?' a '+dataBR(c.fim):''}</span>`:''}</div><div class="mods">${mods}</div>
       <div class="linha-botoes"><button class="pri" data-abrir="${c.id}">Abrir</button><button data-editar="contratos|${c.id}">Editar</button><button class="del" data-excluir="contratos|${c.id}">Excluir</button></div></div>`;
