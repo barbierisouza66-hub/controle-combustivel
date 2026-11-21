@@ -228,7 +228,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '4.8';
+const VERSAO = '4.9';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -776,6 +776,7 @@ function resumoEquip(){
 const BUCKET_DOCS = 'documentos';
 const DOCS = { crlv:{ nome:'CRLV', datas:[['venc','Vencimento / exercício']] }, opac:{ nome:'Teste de opacidade', datas:[['data','Data do teste'],['venc','Validade']] } };
 const precisaOpac = e => tipoEquip(e) === 'Caminhão';
+const TIPOS_DOCS = ['Caminhão','Trator','Motociclo'];   // por enquanto só esses têm CRLV na relação
 function statusDoc(d){
   if(!d?.path) return { t:'Sem arquivo', c:'n', ord:3 };
   if(!d.venc) return { t:'Enviado', c:'', ord:0 };
@@ -791,13 +792,13 @@ function celDoc(e, k){
     <label class="peq btnarq">${d.path?'Substituir arquivo':'Enviar arquivo'}<input type="file" accept="application/pdf,image/*" data-docarq hidden></label></td>`;
 }
 function telaDocsEquip(){
-  const eq = L('equipamentos').filter(ativoEquip).sort(ENT.equipamentos.ordem), cam = eq.filter(precisaOpac);
+  const eq = L('equipamentos').filter(e=>ativoEquip(e) && TIPOS_DOCS.includes(tipoEquip(e))).sort((a,b)=>TIPOS_DOCS.indexOf(tipoEquip(a))-TIPOS_DOCS.indexOf(tipoEquip(b)) || ENT.equipamentos.ordem(a,b)), cam = eq.filter(precisaOpac);
   const venc = (lista, k) => lista.filter(e=>statusDoc(e[k]).ord===4).length, aVencer = (lista, k) => lista.filter(e=>statusDoc(e[k]).ord===2).length, sem = (lista, k) => lista.filter(e=>!e[k]?.path).length;
   const kpis = `<div class="kpis">${kpi('CRLV enviados', `${eq.length - sem(eq,'crlv')} de ${eq.length}`, `${sem(eq,'crlv')} sem arquivo`)}${kpi('CRLV vencidos', venc(eq,'crlv'), `${aVencer(eq,'crlv')} vencem em até 30 dias`)}
     ${kpi('Opacidade (caminhões)', `${cam.length - sem(cam,'opac')} de ${cam.length}`, `${sem(cam,'opac')} sem teste enviado`)}${kpi('Opacidade vencida', venc(cam,'opac'), `${aVencer(cam,'opac')} vencem em até 30 dias`)}</div>`;
-  if(!eq.length) return kpis + '<div class="card"><p style="margin:0">Cadastre os equipamentos em <b>Cadastros → Equipamentos</b>.</p></div>';
+  if(!eq.length) return kpis + '<div class="card"><p style="margin:0">Nenhum caminhão, trator ou motociclo ativo. Cadastre em <b>Cadastros → Equipamentos</b>.</p></div>';
   const linhas = eq.map(e=>`<tr><td><b>${esc(e.codigo)}</b>${e.controle?`<div class="s">int. ${esc(e.controle)}</div>`:''}</td><td>${esc(tipoEquip(e))}</td><td>${esc(e.placa||'')}</td>${celDoc(e,'crlv')}${precisaOpac(e)?celDoc(e,'opac'):'<td class="s">só para caminhões</td>'}</tr>`).join('');
-  return kpis + `<div class="card"><h2>CRLV e teste de opacidade por equipamento</h2>
+  return kpis + `<div class="card"><h2>CRLV de caminhões, tratores e motociclos · teste de opacidade dos caminhões</h2>
     <p class="info">Envie o arquivo em PDF ou foto (até 10 MB). Informe o vencimento para o sistema avisar quando estiver perto de vencer. As datas são salvas assim que você muda o campo.</p>
     <div class="tabela-wrap"><table class="docs"><thead><tr><th>Equipamento</th><th>Tipo</th><th>Placa</th><th>CRLV</th><th>Teste de opacidade</th></tr></thead><tbody>${linhas}</tbody></table></div></div>`;
 }
