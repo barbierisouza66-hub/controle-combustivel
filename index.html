@@ -236,7 +236,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '5.0';
+const VERSAO = '5.1';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -294,6 +294,7 @@ function agrupa(lista, chave, valor){ const g={}; lista.forEach(r=>{ const k=cha
 
 /* ===================== LISTAS DE OPÇÕES ===================== */
 const OPT_COMB = ['Gasolina','Mistura 2T','Diesel S10','Diesel S500','Etanol','Elétrico','Não se aplica'];
+const CAT_CUSTO = ['Peças','Mão de obra / serviço','Pneus','Lubrificantes / óleo','Locação / aluguel','IPVA / licenciamento / seguro','Outros'];
 const TIPOS_EQ = ['Trator','Roçadeira','Giro Zero','Roçadeira de Arraste – Simples','Roçadeira de Arraste – Dupla','Roçadeira de Arraste – Hidráulica','Motociclo','Caminhão'];
 const tipoEquip = r => r?.tipo==='Roçadeira Costal' ? 'Roçadeira' : (r?.tipo || '');   // 'Roçadeira Costal' antigo = Roçadeira
 const SIT_EQ = ['Operando','Em manutenção','Parado','Inativo / Condenada'];
@@ -457,6 +458,13 @@ const ENT = {
       col('Homem-hora',r=>num(horasEntre(r.inicio,r.fim)*(+r.qtdColab||0)),{n:1,tot:l=>num(soma(l,r=>horasEntre(r.inicio,r.fim)*(+r.qtdColab||0)))}),
       col('Equipe',r=>{ const n=(r.colabs||[]).map(nomeColab).join(', '); return n.length>40?n.slice(0,40)+'…':n; })] },
 
+  custos: { nome:'custo do equipamento', data:'data', campos:[
+      {k:'data',l:'Data',t:'date',req:1},{k:'equipId',l:'Equipamento',t:'ref',ent:'equipamentos',filtro:()=>true,req:1},
+      {k:'categoria',l:'Categoria',t:'select',op:CAT_CUSTO},{k:'descricao',l:'Descrição',req:1},{k:'valor',l:'Valor (R$)',t:'moeda',req:1},
+      {k:'documento',l:'Nota fiscal / documento'},{k:'fornecedor',l:'Fornecedor'},{k:'obs',l:'Observação'}],
+    cols:[col('Data',r=>dataBR(r.data)),col('Equipamento',r=>nomeEquip(r.equipId)),col('Categoria',r=>r.categoria),col('Descrição',r=>r.descricao),col('NF / doc.',r=>r.documento),col('Fornecedor',r=>r.fornecedor),
+      col('Valor',r=>brl(r.valor),{n:1,tot:l=>brl(soma(l,r=>r.valor))})] },
+
   manutencoes: { nome:'manutenção', data:'data', campos:[
       {k:'data',l:'Data de abertura',t:'date',req:1},{k:'equipId',l:'Equipamento',t:'ref',ent:'equipamentos',filtro:()=>true,req:1},{k:'tipo',l:'Tipo',t:'select',op:['Corretiva','Preventiva','Inspeção / checklist']},
       {k:'descricao',l:'Defeito / serviço',req:1},{k:'status',l:'Status',t:'select',op:['Aberta','Em andamento','Concluída']},{k:'conclusao',l:'Data de conclusão',t:'date',semDef:1},
@@ -487,14 +495,14 @@ function situacaoOc(r){
 const he50Oc = r => (+r.he50||0) + (r.tipo==='Hora extra 50%' ? (+r.horas||0) : 0);
 const he100Oc = r => (+r.he100||0) + (r.tipo==='Hora extra 100%' ? (+r.horas||0) : 0);
 const heOc = r => he50Oc(r) + he100Oc(r);
-const COLECOES_CONTRATO = ['colaboradores','equipamentos','quadro','vagas','ocorrencias','abastecimentos','nylon','ordens','manutencoes','fardos','frequencia'];
+const COLECOES_CONTRATO = ['colaboradores','equipamentos','custos','quadro','vagas','ocorrencias','abastecimentos','nylon','ordens','manutencoes','fardos','frequencia'];
 
 /* ===================== MÓDULOS E ABAS ===================== */
 const MODULOS = [
   { id:'geral', nome:'Visão geral', abas:[ {nome:'Resumo do mês', painel:()=>painelGeral()} ] },
   { id:'combustivel', nome:'Combustível', abas:[ {nome:'Painel', painel:()=>painelCombustivel()}, {nome:'Abastecimento', ent:'abastecimentos'}, {nome:'Nylon e Faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'RH – Frequência', painel:()=>telaFrequencia(), depois:()=>prepFrequencia()}, {nome:'RH – Resumo do mês', painel:()=>painelFrequencia()} ] },
   { id:'rh', nome:'RH', abas:[ {nome:'Painel', painel:()=>painelRH()}, {nome:'Ocorrências – calendário do mês', painel:()=>telaCalendarioRH(), depois:()=>prepCalendarioRH()}, {nome:'Quadro previsto e vagas', painel:()=>telaQuadroVagas(), depois:()=>{ prepararForm('quadro'); prepararForm('vagas'); }} ] },
-  { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', painel:()=>graficoDispEquip() + telaEntidade('manutencoes'), depois:()=>prepararForm('manutencoes')}, {nome:'Documentos – CRLV e opacidade', painel:()=>telaDocsEquip(), depois:()=>prepDocsEquip()} ] },
+  { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', painel:()=>graficoDispEquip() + telaEntidade('manutencoes'), depois:()=>prepararForm('manutencoes')}, {nome:'Documentos – CRLV e opacidade', painel:()=>telaDocsEquip(), depois:()=>prepDocsEquip()}, {nome:'Custos por equipamento', painel:()=>telaCustosEquip(), depois:()=>prepararForm('custos')} ] },
   { id:'fardos', nome:'Produção de Fardos', abas:[ {nome:'Painel', painel:()=>painelFardos()}, {nome:'Lançar produção', ent:'fardos'} ] },
   { id:'cadastros', nome:'Cadastros', abas:[ {nome:'Colaboradores', ent:'colaboradores'}, {nome:'Equipamentos', ent:'equipamentos'} ] },
 ];
@@ -843,6 +851,25 @@ function prepDocsEquip(){
     if(error){ w?.close(); alert('Não foi possível abrir o arquivo: '+error.message); return; }
     if(w) w.location = data.signedUrl; else location.href = data.signedUrl;
   });
+}
+// Custos por equipamento: combustível (abastecimentos) + manutenções + outros custos lançados à parte
+function telaCustosEquip(){
+  const ab = doMes(L('abastecimentos'),'data'), mt = doMes(L('manutencoes'),'data'), ou = doMes(L('custos'),'data');
+  const ids = [...new Set([...L('equipamentos').filter(ativoEquip).map(e=>e.id), ...ab.map(a=>a.equipId), ...mt.map(m=>m.equipId), ...ou.map(c=>c.equipId)])].filter(Boolean);
+  const linhas = ids.map(id=>{ const e = equip(id) || {}, comb = soma(ab.filter(a=>a.equipId===id),a=>(+a.litros||0)*(+a.valorLitro||0)), litros = soma(ab.filter(a=>a.equipId===id),a=>a.litros),
+      man = soma(mt.filter(m=>m.equipId===id),m=>m.custo), out = soma(ou.filter(c=>c.equipId===id),c=>c.valor); return { id, e, comb, litros, man, out, tot: comb+man+out }; })
+    .sort((a,b)=>b.tot-a.tot || String(a.e.codigo).localeCompare(String(b.e.codigo)));
+  const T = k => soma(linhas, l=>l[k]), max = Math.max(1, ...linhas.map(l=>l.tot)), semPreco = ab.filter(a=>+a.litros && !+a.valorLitro).length;
+  const periodo = est.mes ? mesBR(est.mes) : 'todos os meses';
+  const kpis = `<div class="kpis">${kpi('Custo total', brl(T('tot')), periodo)}${kpi('Combustível', brl(T('comb')), `${num(T('litros'))} L${semPreco?` · ${semPreco} abastecimento(s) sem preço`:''}`)}${kpi('Manutenções', brl(T('man')), mt.length+' lançamento(s)')}${kpi('Outros custos', brl(T('out')), ou.length+' lançamento(s)')}</div>`;
+  const corpo = linhas.map(l=>`<tr><td><b>${esc(l.e.codigo||'—')}</b>${l.e.controle?`<div class="s">int. ${esc(l.e.controle)}</div>`:''}</td><td>${esc(tipoEquip(l.e))}</td>
+    <td class="num">${brl(l.comb)}${l.litros?`<div class="s">${num(l.litros)} L</div>`:''}</td><td class="num">${brl(l.man)}</td><td class="num">${brl(l.out)}</td><td class="num"><b>${brl(l.tot)}</b></td>
+    <td style="width:22%"><div class="barra"><i style="width:${l.tot/max*100}%"></i></div></td></tr>`).join('');
+  return kpis + `<div class="card"><div class="filtros"><h2 style="margin:0">Custo por equipamento – ${periodo}</h2><span style="flex:1"></span><span class="info" style="margin:0">troque o mês no seletor do topo</span></div>
+    <div class="tabela-wrap"><table><thead><tr><th>Equipamento</th><th>Tipo</th><th class="num">Combustível</th><th class="num">Manutenções</th><th class="num">Outros custos</th><th class="num">Total</th><th></th></tr></thead>
+    <tbody>${corpo || '<tr><td class="vazio" colspan="7">Nenhum custo no período.</td></tr>'}${linhas.length?`<tr class="total"><td>Total</td><td></td><td class="num">${brl(T('comb'))}</td><td class="num">${brl(T('man'))}</td><td class="num">${brl(T('out'))}</td><td class="num">${brl(T('tot'))}</td><td></td></tr>`:''}</tbody></table></div>
+    <p class="info">Combustível = litros × valor do litro dos abastecimentos · Manutenções = campo "Custo" das manutenções · Outros custos = lançamentos abaixo (peças, pneus, locação, IPVA etc.).</p></div>`
+    + telaEntidade('custos');
 }
 // Gráfico: equipamentos disponíveis (Operando) x parados (Em manutenção / Parado), no total e por tipo
 function graficoDispEquip(){
