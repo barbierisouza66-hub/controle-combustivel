@@ -248,7 +248,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '5.7';
+const VERSAO = '5.8';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -473,7 +473,7 @@ const ENT = {
       col('Homem-hora',r=>num(horasEntre(r.inicio,r.fim)*(+r.qtdColab||0)),{n:1,tot:l=>num(soma(l,r=>horasEntre(r.inicio,r.fim)*(+r.qtdColab||0)))}),
       col('Equipe',r=>{ const n=(r.colabs||[]).map(nomeColab).join(', '); return n.length>40?n.slice(0,40)+'…':n; })] },
 
-  ladoar: { nome:'área do Lado AR', titulo:r=>r.area, filtroLista:r=>cicloLA(r)===cicloAtualLA(), ordem:(a,b)=>(+a.seq||0)-(+b.seq||0) || String(a.area).localeCompare(String(b.area)), campos:[
+  ladoar: { nome:'área do Lado AR', titulo:r=>r.area, filtroLista:r=>cicloLA(r)===cicloAtualLA('ladoar'), ordem:(a,b)=>(+a.seq||0)-(+b.seq||0) || String(a.area).localeCompare(String(b.area)), campos:[
       {k:'area',l:'Equipamento / área (código)',req:1},{k:'localizacao',l:'Localização'},
       {k:'cicloIni',l:'Ciclo – início',t:'date',req:1},{k:'cicloFim',l:'Ciclo – fim',t:'date',req:1},
       {k:'metragem',l:'Metragem prevista (m²)',t:'number',step:'0.01'},{k:'status',l:'Status',t:'select',op:STATUS_LA},
@@ -510,6 +510,7 @@ const ENT = {
       col('kg/fardo',r=>(+r.peso&&+r.quantidade)?num(r.peso/r.quantidade,1):'',{n:1,tot:l=>{const q=soma(l,r=>r.quantidade),p=soma(l,r=>r.peso);return q&&p?num(p/q,1):'';}}),
       col('Operador',r=>r.colabId?nomeColab(r.colabId):'')] },
 };
+ENT.ladoterra = { ...ENT.ladoar, nome:'área do Lado Terra', filtroLista:r=>cicloLA(r)===cicloAtualLA('ladoterra') };
 ENT.frequencia = { nome:'frequência', data:'data', campos:[], cols:[] };
 // Ocorrências antigas tinham só "tipo": aqui viram situação/motivo/atestado.
 function situacaoOc(r){
@@ -522,12 +523,12 @@ function situacaoOc(r){
 const he50Oc = r => (+r.he50||0) + (r.tipo==='Hora extra 50%' ? (+r.horas||0) : 0);
 const he100Oc = r => (+r.he100||0) + (r.tipo==='Hora extra 100%' ? (+r.horas||0) : 0);
 const heOc = r => he50Oc(r) + he100Oc(r);
-const COLECOES_CONTRATO = ['colaboradores','equipamentos','custos','lli','ladoar','quadro','vagas','ocorrencias','abastecimentos','nylon','ordens','manutencoes','fardos','frequencia'];
+const COLECOES_CONTRATO = ['colaboradores','equipamentos','custos','lli','ladoar','ladoterra','quadro','vagas','ocorrencias','abastecimentos','nylon','ordens','manutencoes','fardos','frequencia'];
 
 /* ===================== MÓDULOS E ABAS ===================== */
 const MODULOS = [
   { id:'geral', nome:'Visão geral', abas:[ {nome:'Resumo do mês', painel:()=>painelGeral()} ] },
-  { id:'combustivel', nome:'Operação', abas:[ {nome:'Painel', painel:()=>painelCombustivel()}, {nome:'Abastecimento', ent:'abastecimentos'}, {nome:'Nylon e Faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'Lado AR', painel:()=>telaLadoAr(), depois:()=>prepLadoAr()} ] },   // abas de RH retiradas do Combustível (o RH fica no módulo RH)
+  { id:'combustivel', nome:'Operação', abas:[ {nome:'Painel', painel:()=>painelCombustivel()}, {nome:'Abastecimento', ent:'abastecimentos'}, {nome:'Nylon e Faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'Lado AR', painel:()=>telaLadoAr('ladoar'), depois:()=>prepLadoAr('ladoar')}, {nome:'Lado Terra', painel:()=>telaLadoAr('ladoterra'), depois:()=>prepLadoAr('ladoterra')} ] },   // abas de RH retiradas do Combustível (o RH fica no módulo RH)
   { id:'rh', nome:'RH', abas:[ {nome:'Painel', painel:()=>painelRH()}, {nome:'Ocorrências – calendário do mês', painel:()=>telaCalendarioRH(), depois:()=>prepCalendarioRH()}, {nome:'Quadro previsto e vagas', painel:()=>telaQuadroVagas(), depois:()=>{ prepararForm('quadro'); prepararForm('vagas'); }} ] },
   { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', painel:()=>graficoDispEquip() + telaEntidade('manutencoes'), depois:()=>prepararForm('manutencoes')}, {nome:'Documentos – CRLV e opacidade', painel:()=>telaDocsEquip(), depois:()=>prepDocsEquip()}, {nome:'Custos por equipamento', painel:()=>telaCustosEquip(), depois:()=>prepararForm('custos')}, {nome:'LLI', painel:()=>telaLLI(), depois:()=>prepLLI()} ] },
   { id:'cadastros', nome:'Cadastros', abas:[ {nome:'Colaboradores', ent:'colaboradores'}, {nome:'Equipamentos', ent:'equipamentos'} ] },
@@ -942,8 +943,9 @@ function prepLLI(){
 }
 /* ===== Lado AR: áreas por ciclo, status (executada / em andamento / não executada) e gráfico de andamento ===== */
 const cicloLA = r => `${r.cicloIni}|${r.cicloFim}`;
-function ciclosLA(){ return [...new Set(L('ladoar').map(cicloLA))].sort().reverse(); }
-function cicloAtualLA(){ const cs = ciclosLA(); if(cs.includes(est.cicloLA)) return est.cicloLA; const h = hoje(); return cs.find(c=>{ const [i,f]=c.split('|'); return i<=h && h<=f; }) || cs[0] || ''; }
+const LADOS = { ladoar:'Lado AR', ladoterra:'Lado Terra' }; let ladoLA = 'ladoar';   // lado em exibição (mesma tela para Lado AR e Lado Terra)
+function ciclosLA(k=ladoLA){ return [...new Set(L(k).map(cicloLA))].sort().reverse(); }
+function cicloAtualLA(k=ladoLA){ const cs = ciclosLA(k), sel = (est.cicloLA||{})[k]; if(cs.includes(sel)) return sel; const h = hoje(); return cs.find(c=>{ const [i,f]=c.split('|'); return i<=h && h<=f; }) || cs[0] || ''; }
 function ajustarLA(o){
   if(o.status==='Executada'){ if(!+o.metragemFinal) o.metragemFinal = o.metragem || ''; if(!o.dataConclusao) o.dataConclusao = hoje(); }
   else delete o.dataConclusao;
@@ -971,8 +973,9 @@ function graficoLA(l, ini, fim){
     ${ultimo?`<circle cx="${x(ultimo[0])}" cy="${y(ultimo[1])}" r="4" fill="${COR_LA['Executada']}"/>`:''}</svg>
     <div class="faixas"><div><i style="background:#9aa5a0"></i>Meta (ritmo para fechar o ciclo)</div><div><i style="background:${COR_LA['Executada']}"></i>Executada acumulada</div><div><i style="background:${COR_LA['Em andamento']}"></i>Em andamento (somado ao executado)</div></div>`;
 }
-function telaLadoAr(){
-  const c = cicloAtualLA(), [ini, fim] = c ? c.split('|') : ['',''], l = c ? L('ladoar').filter(r=>cicloLA(r)===c) : [];
+function telaLadoAr(k='ladoar'){
+  ladoLA = k;
+  const c = cicloAtualLA(), [ini, fim] = c ? c.split('|') : ['',''], l = c ? L(ladoLA).filter(r=>cicloLA(r)===c) : [];
   const porSt = s => l.filter(r=>(r.status||'Não executada')===s), m2 = s => soma(porSt(s), r=>r.metragem), prev = soma(l,r=>r.metragem) || 0;
   const mExec = soma(porSt('Executada'), r=>+r.metragemFinal||+r.metragem), pc = v => prev ? Math.round(v/prev*100) : 0;
   const opcoes = ciclosLA().map(x=>`<option value="${x}" ${x===c?'selected':''}>${rotuloCicloLA(x)}</option>`).join('');
@@ -980,15 +983,15 @@ function telaLadoAr(){
     ${kpi('Em andamento', porSt('Em andamento').length, num(m2('Em andamento'),0)+' m²')}${kpi('Não executadas', porSt('Não executada').length, num(m2('Não executada'),0)+' m²')}</div>`;
   const barra = prev ? `<div class="dispbar" style="margin:10px 0 4px">${STATUS_LA.slice().reverse().map(s=>{ const v = m2(s); return v ? `<i style="width:${v/prev*100}%;background:${COR_LA[s]}" title="${s}: ${num(v,0)} m²">${pc(v)>=6?pc(v)+'%':''}</i>` : ''; }).join('')}</div>
     <div class="faixas" style="margin-bottom:10px">${STATUS_LA.slice().reverse().map(s=>`<div><i style="background:${COR_LA[s]}"></i>${s}: <b>${porSt(s).length}</b> área(s) · ${num(m2(s),0)} m²</div>`).join('')}</div>` : '';
-  return `<div class="card"><div class="filtros"><h2 style="margin:0">Lado AR – andamento do ciclo</h2><span style="flex:1"></span>
+  return `<div class="card"><div class="filtros"><h2 style="margin:0">${LADOS[ladoLA]} – andamento do ciclo</h2><span style="flex:1"></span>
       ${opcoes?`<label style="flex-direction:row;align-items:center;gap:6px">Ciclo <select id="laCiclo">${opcoes}</select></label><button id="laNovoCiclo" title="Copia as áreas deste ciclo para o próximo mês, todas como Não executada">+ Novo ciclo</button><button class="pri" id="laPDF" title="Gera o relatório gerencial deste ciclo em PDF">📄 Gerar PDF</button>`:''}</div>
-    ${c ? kpis + barra + graficoLA(l, ini, fim) : '<p class="info">Cadastre as áreas do ciclo no formulário abaixo.</p>'}</div>` + telaEntidade('ladoar');
+    ${c ? kpis + barra + graficoLA(l, ini, fim) : '<p class="info">Cadastre as áreas do ciclo no formulário abaixo.</p>'}</div>` + telaEntidade(ladoLA);
 }
 // ===== Relatório gerencial do Lado AR em PDF (gerado no navegador) =====
 const brN = (v, d=0) => Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:d, maximumFractionDigits:d});
-function grupoLA(loc){ const u = String(loc||'').toUpperCase(); return u.includes('AZUL')?'Azul':u.includes('AMARELO')?'Amarelo':u.includes('VIOLETA')?'Violeta':u.includes('PATIO')||u.includes('PÁTIO')?'Pátio':u.includes('PIER')||u.includes('PÍER')?'Píer':'Outros'; }
+function grupoLA(loc){ const u = String(loc||'').toUpperCase(); return u.includes('AZUL')?'Azul':u.includes('AMARELO')?'Amarelo':u.includes('VIOLETA')?'Violeta':u.includes('VERMELH')||u.includes('VERM.')?'Vermelho':u.includes('VERDE')?'Verde':u.includes('PATIO')||u.includes('PÁTIO')?'Pátio':u.includes('PIER')||u.includes('PÍER')?'Píer':'Outros'; }
 function relatorioLAHTML(c){
-  const [ini, fim] = c.split('|'), l = L('ladoar').filter(r=>cicloLA(r)===c).sort(ENT.ladoar.ordem), h = hoje() < ini ? ini : hoje() > fim ? fim : hoje();
+  const [ini, fim] = c.split('|'), l = L(ladoLA).filter(r=>cicloLA(r)===c).sort(ENT.ladoar.ordem), h = hoje() < ini ? ini : hoje() > fim ? fim : hoje();
   const prev = soma(l,r=>r.metragem) || 0, por = s => l.filter(r=>(r.status||'Não executada')===s), mE = soma(por('Executada'),r=>+r.metragemFinal||+r.metragem), mA = soma(por('Em andamento'),r=>r.metragem), mN = soma(por('Não executada'),r=>r.metragem);
   const pc = v => prev ? brN(v/prev*100,1)+'%' : '—', dias = Math.round((new Date(fim+'T12:00:00')-new Date(ini+'T12:00:00'))/864e5)+1, dec = Math.round((new Date(h+'T12:00:00')-new Date(ini+'T12:00:00'))/864e5)+1;
   const restam = Math.max(1, dias - dec + 1), ritmo = (prev - mE)/restam, metaHoje = dias>1 ? prev*(dec-1)/(dias-1) : prev;
@@ -996,7 +999,7 @@ function relatorioLAHTML(c){
   const box = (t,v,s,cor='#1d2420') => `<td style="width:25%;padding:0 4px"><div style="border:1px solid #dfe4e1;border-radius:6px;padding:7px 9px"><div style="font-size:10px;color:${mut}">${t}</div><div style="font-size:19px;font-weight:700;color:${cor};margin:2px 0">${v}</div><div style="font-size:9.5px;color:${mut}">${s}</div></div></td>`;
   const seg = (v,cor) => v ? `<div style="width:${v/prev*100}%;background:${cor};color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center">${v/prev>.08?pc(v):''}</div>` : '';
   const grupos = {}; l.forEach(r=>{ const g = grupos[grupoLA(r.localizacao)] ||= {E:0,A:0,N:0}; const st = r.status||'Não executada'; if(st==='Executada') g.E += +r.metragemFinal||+r.metragem; else if(st==='Em andamento') g.A += +r.metragem||0; else g.N += +r.metragem||0; });
-  const ordem = ['Azul','Amarelo','Violeta','Pátio','Píer','Outros'].filter(g=>grupos[g]), maxG = Math.max(1, ...ordem.map(g=>grupos[g].E+grupos[g].A+grupos[g].N));
+  const ordem = ['Azul','Amarelo','Violeta','Vermelho','Verde','Pátio','Píer','Outros'].filter(g=>grupos[g]), maxG = Math.max(1, ...ordem.map(g=>grupos[g].E+grupos[g].A+grupos[g].N));
   const barrasG = ordem.map(g=>{ const x = grupos[g], t = x.E+x.A+x.N; return `<tr><td style="width:62px;font-size:10.5px;padding:3px 6px 3px 0;text-align:right">${g}</td><td style="padding:3px 0;width:430px"><div style="display:flex;height:14px;width:${Math.max(4,Math.round(t/maxG*420))}px">${[[x.E,verde],[x.A,lar],[x.N,verm]].map(([v,cr])=>v?`<div style="flex:${v};background:${cr}"></div>`:'').join('')}</div></td><td style="font-size:9.5px;color:${mut};white-space:nowrap;padding-left:6px">${brN(t/1000,1)} mil m² · ${t?brN(x.E/t*100,0):0}% executado</td></tr>`; }).join('');
   const fundo = {'Executada':'#e6f2ec','Em andamento':'#fdf0e3','Não executada':'#fdecea'}, corSt = {'Executada':verde,'Em andamento':lar,'Não executada':verm};
   const linhas = l.map(r=>{ const st = r.status||'Não executada'; return `<tr><td style="font-weight:700">${esc(r.area)}</td><td>${esc(r.localizacao||'')}</td><td style="text-align:right">${r.metragem?brN(r.metragem):'—'}</td><td style="background:${fundo[st]};color:${corSt[st]};font-weight:700">${st}</td><td style="text-align:right">${r.metragemFinal?brN(r.metragemFinal):''}</td></tr>`; }).join('');
@@ -1004,7 +1007,7 @@ function relatorioLAHTML(c){
   const svg = graficoLA(l, ini, fim).split('<div class="faixas">')[0];
   const th = 'style="background:#1f6f4a;color:#fff;text-align:left;padding:4px 6px;font-size:10px"';
   return `<div id="relLA" style="width:760px;"><style>#relLA td,#relLA th{padding:3px 6px;text-transform:none;letter-spacing:0;font-weight:inherit;vertical-align:middle;border-bottom:1px solid #e6e9e7}#relLA table.semlinha td{border:none}#relLA .relTab td{font-size:9.5px}#relLA .relTab th{font-weight:700}</style><div style="width:760px;padding:10px 18px;font-family:Inter,Arial,sans-serif;color:#1d2420;background:#fff">
-    <div style="border-top:3px solid ${verde};padding-top:10px"><div style="font-size:22px;font-weight:700">Relatório Gerencial – Roçada Lado AR</div>
+    <div style="border-top:3px solid ${verde};padding-top:10px"><div style="font-size:22px;font-weight:700">Relatório Gerencial – Roçada ${LADOS[ladoLA]}</div>
     <div style="font-size:11.5px;color:${mut};margin-top:3px">Contrato ${esc(contrato.nome)} · Ciclo de ${dataBR(ini)} a ${dataBR(fim)} (${mesBR(fim.slice(0,7)).split(' de ')[0]}) · Posição em ${dataBR(hoje())}</div></div>
     <table class="semlinha" style="width:100%;border-collapse:separate;margin:12px -4px 8px"><tr>${box('Metragem prevista no ciclo', brN(prev)+' m²', l.length+' áreas')}${box('Executada', brN(mE)+' m²', `${pc(mE)} · ${por('Executada').length} áreas`, verde)}${box('Em andamento', brN(mA)+' m²', `${pc(mA)} · ${por('Em andamento').length} áreas`, lar)}${box('Não executada', brN(mN)+' m²', `${pc(mN)} · ${por('Não executada').length} áreas`, verm)}</tr></table>
     ${prev?`<div style="display:flex;height:22px;border-radius:4px;overflow:hidden">${seg(mE,verde)}${seg(mA,lar)}${seg(mN,verm)}</div>`:''}
@@ -1033,7 +1036,7 @@ async function svgParaImagem(svgEl){
 function carregarScript(src){ return new Promise((ok,erro)=>{ if([...document.scripts].some(s=>s.src===src)) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = erro; document.head.appendChild(s); }); }
 async function gerarPdfLA(somenteBlob){
   const c = cicloAtualLA(); if(!c) return;
-  const [ini, fim] = c.split('|'), nome = `Relatorio_Lado_AR_${ini}_a_${fim}.pdf`;
+  const [ini, fim] = c.split('|'), nome = `Relatorio_${LADOS[ladoLA].replace(' ','_')}_${ini}_a_${fim}.pdf`;
   const caixa = document.createElement('div'); caixa.style.cssText = 'position:fixed;left:-10000px;top:0'; caixa.innerHTML = relatorioLAHTML(c); document.body.appendChild(caixa);
   carregando(true);
   try{
@@ -1050,26 +1053,27 @@ async function gerarPdfLA(somenteBlob){
     else alert('Não foi possível gerar o PDF: '+(e.message||e));
   }finally{ carregando(false); caixa.remove(); }
 }
-function prepLadoAr(){
-  prepararForm('ladoar');
+function prepLadoAr(k='ladoar'){
+  ladoLA = k;
+  prepararForm(k);
   $('#laPDF')?.addEventListener('click', ()=>gerarPdfLA());
-  $('#laCiclo')?.addEventListener('change', e=>{ est.cicloLA = e.target.value; renderTudo(); });
+  $('#laCiclo')?.addEventListener('change', e=>{ (est.cicloLA ||= {})[ladoLA] = e.target.value; renderTudo(); });
   document.querySelectorAll('[data-lastatus]').forEach(s=>s.addEventListener('change', async ()=>{
-    const r = L('ladoar').find(x=>x.id===s.dataset.lastatus); if(!r) return;
+    const r = L(ladoLA).find(x=>x.id===s.dataset.lastatus); if(!r) return;
     const o = ajustarLA({ ...r, status:s.value });
-    try{ await gravar('ladoar', o); toast(`${r.area}: ${s.value}.`); renderTudo(); }catch(e){ alert('Não foi possível salvar: '+(e.message||e)); }
+    try{ await gravar(ladoLA, o); toast(`${r.area}: ${s.value}.`); renderTudo(); }catch(e){ alert('Não foi possível salvar: '+(e.message||e)); }
   }));
   $('#laNovoCiclo')?.addEventListener('click', async ()=>{
     const c = cicloAtualLA(), [ini, fim] = c.split('|'), mais1 = d => { const [a,m,dd] = d.split('-').map(Number), x = new Date(a, m, dd); return x.toISOString().slice(0,10); };
     const ni = mais1(ini), nf = mais1(fim);
     if(ciclosLA().includes(`${ni}|${nf}`)){ alert('O próximo ciclo já existe. Escolha-o na lista de ciclos.'); return; }
-    if(!confirm(`Criar o ciclo ${dataBR(ni)} a ${dataBR(nf)} copiando as ${L('ladoar').filter(r=>cicloLA(r)===c).length} áreas deste ciclo (todas como "Não executada")?`)) return;
+    if(!confirm(`Criar o ciclo ${dataBR(ni)} a ${dataBR(nf)} copiando as ${L(ladoLA).filter(r=>cicloLA(r)===c).length} áreas deste ciclo (todas como "Não executada")?`)) return;
     carregando(true);
     try{
-      const novos = L('ladoar').filter(r=>cicloLA(r)===c).map(r=>({ id:uid(), area:r.area, localizacao:r.localizacao, metragem:r.metragem, seq:r.seq, cicloIni:ni, cicloFim:nf, status:'Não executada', obs:'' }));
-      const { error } = await sb.from(TABELA).upsert(novos.map(({id,...dados})=>({ id, colecao:'ladoar', contrato_id:contrato.id, dados, atualizado_em:new Date().toISOString() })));
+      const novos = L(ladoLA).filter(r=>cicloLA(r)===c).map(r=>({ id:uid(), area:r.area, localizacao:r.localizacao, metragem:r.metragem, seq:r.seq, cicloIni:ni, cicloFim:nf, status:'Não executada', obs:'' }));
+      const { error } = await sb.from(TABELA).upsert(novos.map(({id,...dados})=>({ id, colecao:ladoLA, contrato_id:contrato.id, dados, atualizado_em:new Date().toISOString() })));
       if(error) throw error;
-      db.ladoar = L('ladoar').concat(novos); est.cicloLA = `${ni}|${nf}`;
+      db[ladoLA] = L(ladoLA).concat(novos); (est.cicloLA ||= {})[ladoLA] = `${ni}|${nf}`;
     }catch(e){ alert('Não foi possível criar o ciclo: '+(e.message||e)); }
     carregando(false); renderTudo();
   });
