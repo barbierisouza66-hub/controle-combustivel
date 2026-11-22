@@ -248,7 +248,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '7.3';
+const VERSAO = '7.4';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -491,12 +491,15 @@ const ENT = {
       col('Faca',r=>num(r.faca,0),{n:1,tot:l=>num(soma(l,r=>r.faca),0)}),col('Local',r=>r.local)] },
 
   ordens: { nome:'ordem de serviço', data:'inicio', campos:[
-      {k:'numero',l:'Nº da OS',req:1},{k:'local',l:'Local / Área',req:1},{k:'tipo',l:'Tipo de serviço',t:'select',op:['Roçada costal','Roçada com trator','Capina','Limpeza','Outro']},
+      {k:'osArea',l:'Local / Área (ordens do Lado AR e Lado Terra)',t:'selectf',op:()=>opcoesOS(),req:1},{k:'numero',l:'Nº da OS (automático)',req:1},{k:'localOutro',l:'Local (quando for outro)',se:o=>o.osArea==='outro'},{k:'tipo',l:'Tipo de serviço',t:'select',op:['Roçada costal','Roçada com trator','Capina','Limpeza','Outro']},
       {k:'inicio',l:'Início',t:'datetime',req:1},{k:'fim',l:'Fim',t:'datetime',req:1},{k:'qtdColab',l:'Qtd. de colaboradores',t:'number',step:'1',req:1},{k:'area',l:'Área (m²)',t:'number'},
       {k:'colabs',l:'Colaboradores que realizaram (marcar preenche a quantidade)',t:'multi',ent:'colaboradores',filtro:ativoColab},{k:'obs',l:'Descrição',t:'textarea'}],
     validar:o=>horasEntre(o.inicio,o.fim)>0?'':'A data/hora de fim deve ser depois do início.',
+    paraForm:r=>({ osArea: r.osArea || (r.numero ? 'outro' : ''), localOutro: r.osArea ? '' : (r.localOutro ?? r.local ?? '') }),
+    antesSalvar:o=>{ const a = areaDaOS(o.osArea); if(a){ o.numero = a.area; o.local = a.localizacao || a.area; o.lado = LADOS[a._lado]; if(!+o.area && +a.metragem) o.area = a.metragem; } else { o.local = o.localOutro || o.local || ''; delete o.lado; } return o; },
+    aoMudar:(f,o)=>ajustarFormOS(f, true), ajustarForm:f=>ajustarFormOS(f, false),
     extra:f=>{ const h=horasEntre(f.inicio.value,f.fim.value), q=+f.qtdColab.value||0; return `Horas: ${h?hhmm(h):'–'} | Homem-hora: ${h&&q?num(h*q):'–'}`; },
-    cols:[col('Nº OS',r=>r.numero),col('Local',r=>r.local),col('Tipo',r=>r.tipo),col('Início',r=>dtBR(r.inicio)),col('Fim',r=>dtBR(r.fim)),
+    cols:[col('Nº OS',r=>r.numero),col('Lado',r=>r.lado||''),col('Local',r=>r.local),col('Tipo',r=>r.tipo),col('Início',r=>dtBR(r.inicio)),col('Fim',r=>dtBR(r.fim)),
       col('Horas',r=>hhmm(horasEntre(r.inicio,r.fim)),{n:1,tot:l=>hhmm(soma(l,r=>horasEntre(r.inicio,r.fim)))}),col('Colab.',r=>r.qtdColab,{n:1}),
       col('Homem-hora',r=>num(horasEntre(r.inicio,r.fim)*(+r.qtdColab||0)),{n:1,tot:l=>num(soma(l,r=>horasEntre(r.inicio,r.fim)*(+r.qtdColab||0)))}),
       col('Equipe',r=>{ const n=(r.colabs||[]).map(nomeColab).join(', '); return n.length>40?n.slice(0,40)+'…':n; })] },
@@ -640,6 +643,8 @@ function campoHTML(k, f){
       return `<label class="largo">${rot}<div class="checks" data-multi="${f.k}">${ops.map(([v,t])=>`<label><input type="checkbox" value="${esc(v)}"> ${esc(t)}</label>`).join('') || '<span class="info" style="margin:0">Nenhum cadastro ativo.</span>'}</div></label>`;
     }
     case 'textarea': return `<label class="largo">${rot}<textarea name="${f.k}" rows="2"></textarea></label>`;
+    case 'selectf': { const g = {}; f.op().forEach(([v,t,gr])=>{ (g[gr||'']||=[]).push(`<option value="${esc(v)}">${esc(t)}</option>`); });
+      return `<label>${rot}<select name="${f.k}"${req}><option value="">Selecione a ordem…</option>${Object.entries(g).map(([gr,ops])=>gr?`<optgroup label="${esc(gr)}">${ops.join('')}</optgroup>`:ops.join('')).join('')}</select></label>`; }
     case 'select': return `<label>${rot}<select name="${f.k}"${req}>${f.vazio?'<option value="">Selecione…</option>':''}${f.op.map(o=>`<option>${esc(o)}</option>`).join('')}</select></label>`;
     case 'opcoes': return `<div class="lbl">${rot}<div class="opcoes" data-opcoes="${f.k}">${f.op.map(o=>{ const [v,t]=Array.isArray(o)?o:[o,o]; return `<label class="chk"><input type="checkbox" name="${f.k}" value="${esc(v)}"> ${esc(t)}</label>`; }).join('')}</div></div>`;
     case 'ref': {
@@ -712,7 +717,7 @@ function limparForm(k){
   });
   const h = f.closest('.card')?.querySelector('h2'); if(h) h.textContent = 'Novo: '+E.nome;
   if(E.extra) $('#extra_'+k).textContent = E.extra(f);
-  atualizarVisiveis(k);
+  atualizarVisiveis(k); E.ajustarForm?.(f);
 }
 function editarForm(k, id){
   const lista = k==='contratos' ? contratos : L(k), bruto = lista.find(x=>x.id===id); if(!bruto) return;
@@ -729,6 +734,7 @@ function editarForm(k, id){
     el.value = c.t==='moeda' ? fmtBR(v) : v;
   });
   atualizarVisiveis(k);
+  E.ajustarForm?.(f);
   if(k==='colaboradores'){ const oc = salOculto(bruto); ['salario','valorHora'].forEach(n=>{ const el = f.elements[n]; if(!el) return; if(oc){ el.value=''; el.placeholder='🔒 restrito'; } else el.placeholder='0,00'; el.disabled = oc; }); }
   const h = f.closest('.card')?.querySelector('h2'); if(h) h.textContent = 'Editando: '+E.nome;
   if(E.extra) $('#extra_'+k).textContent = E.extra(f);
@@ -1061,6 +1067,25 @@ function prepReceita(){
     const m = numBR($('#plMensal').value), b = numBR($('#plBim').value); const v = numBR($('#plVias').value), n = id => +numBR($(id).value)||0, o = { ...contrato, precoLA:{ mensal:+m||0, bimestral:+b||0 }, precoVias:+v||0, precoLT:{ fixo:n('#ltFixo'), minimo:n('#ltMin'), seco:n('#ltSeco'), chuvoso:n('#ltChuv'), periodo:$('#ltPer').value } };
     try{ await gravar('contratos', o); contrato = o; const i = contratos.findIndex(x=>x.id===o.id); if(i>-1) contratos[i] = o; toast('Preços salvos.'); renderTudo(); }catch(e){ alert('Não foi possível salvar: '+(e.message||e)); }
   });
+}
+/* ===== Ordens de serviço ligadas às áreas do Lado AR / Lado Terra (Nº da OS = código da área, automático) ===== */
+function opcoesOS(){
+  const ops = [];
+  ['ladoar','ladoterra'].forEach(k=>{ const c = cicloAtualLA(k); if(!c) return;
+    L(k).filter(r=>cicloLA(r)===c).sort(ENT.ladoar.ordem).forEach(r=>ops.push([`${k}|${r.area}`, `${r.area} – ${r.localizacao||''}${r.status==='Executada'?' ✓':''}`, `${LADOS[k]} · ciclo ${rotuloCicloLA(c)}`])); });
+  ops.push(['outro','Outro local (digitar o nº da OS)','Outros']);
+  return ops;
+}
+function areaDaOS(v){
+  if(!v || v==='outro') return null; const [k, cod] = String(v).split('|'); if(!LADOS[k]) return null;
+  const c = cicloAtualLA(k), l = L(k).filter(r=>r.area===cod), r = l.find(x=>cicloLA(x)===c) || l[l.length-1];
+  return r ? { ...r, _lado:k } : null;
+}
+function ajustarFormOS(f, mudou){
+  const v = f.elements.osArea?.value, a = areaDaOS(v), n = f.elements.numero; if(!n) return;
+  if(a){ n.value = a.area; n.readOnly = true; n.classList.add('calc'); n.title = 'Preenchido automaticamente pela área escolhida'; if(mudou && f.elements.area && !f.elements.area.value && +a.metragem) f.elements.area.value = a.metragem; }
+  else { n.readOnly = v!=='outro'; n.classList.toggle('calc', n.readOnly); n.title = ''; if(mudou && v==='outro' && n.dataset.auto) n.value = ''; }
+  n.dataset.auto = a ? '1' : '';
 }
 function prepPainelComb(){
   $('#pcColab')?.addEventListener('change', e=>{ est.painelColab = e.target.value; renderTudo(); });
