@@ -248,7 +248,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '5.8';
+const VERSAO = '5.9';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -446,10 +446,10 @@ const ENT = {
       col('H. extra',r=>{ const h=heOc(r); return h?num(h):''; },{n:1,tot:l=>num(soma(l,heOc))}),col('Observação',r=>r.obs)] },
 
   abastecimentos: { nome:'abastecimento', data:'data', campos:[
-      {k:'data',l:'Data',t:'date',req:1},{k:'equipId',l:'Equipamento',t:'ref',ent:'equipamentos',filtro:ativoEquip,req:1},{k:'colabId',l:'Operador / Motorista',t:'ref',ent:'colaboradores',filtro:ativoColab,req:1},
+      {k:'data',l:'Data',t:'date',req:1},{k:'turno',l:'Turno',t:'select',op:['Diurno','Noturno'],req:1},{k:'equipId',l:'Equipamento',t:'ref',ent:'equipamentos',filtro:ativoEquip,req:1},{k:'colabId',l:'Operador / Motorista',t:'ref',ent:'colaboradores',filtro:ativoColab,req:1},
       {k:'combustivel',l:'Combustível',t:'select',op:OPT_COMB},{k:'litros',l:'Litros',t:'number',req:1},{k:'valorLitro',l:'Valor por litro (R$)',t:'moeda'},
       {k:'horimetro',l:'Horímetro / Km',t:'number',step:'0.1'},{k:'local',l:'Local / Frente'},{k:'obs',l:'Observação',t:'textarea'}],
-    cols:[col('Data',r=>dataBR(r.data)),col('Equipamento',r=>nomeEquip(r.equipId)),col('Operador',r=>nomeColab(r.colabId)),col('Combustível',r=>r.combustivel),
+    cols:[col('Data',r=>dataBR(r.data)),col('Turno',r=>r.turno||'—'),col('Equipamento',r=>nomeEquip(r.equipId)),col('Operador',r=>nomeColab(r.colabId)),col('Combustível',r=>r.combustivel),
       col('Litros',r=>num(r.litros),{n:1,tot:l=>num(soma(l,r=>r.litros))}),col('R$/L',r=>r.valorLitro?brl(r.valorLitro):'—',{n:1}),
       col('Total R$',r=>(+r.litros*+r.valorLitro)?brl(+r.litros*+r.valorLitro):'—',{n:1,tot:l=>brl(soma(l,r=>(+r.litros||0)*(+r.valorLitro||0)))}),
       col('Horímetro',r=>r.horimetro?num(r.horimetro,1):'—',{n:1}),col('Local',r=>r.local)] },
