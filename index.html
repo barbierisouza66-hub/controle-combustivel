@@ -248,7 +248,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '6.3';
+const VERSAO = '6.4';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -467,7 +467,7 @@ const ENT = {
       col('Total R$',r=>(+r.litros*+r.valorLitro)?brl(+r.litros*+r.valorLitro):'—',{n:1,tot:l=>brl(soma(l,r=>(+r.litros||0)*(+r.valorLitro||0)))}),
       col('Nº cupom',r=>r.nota),col('Cupom fiscal',r=>celCupom(r),{html:1})] },
 
-  nylon: { nome:'lançamento de nylon e faca', data:'data', campos:[
+  nylon: { nome:'consumo de nylon e faca', data:'data', campos:[
       {k:'data',l:'Data',t:'date',req:1},{k:'equipId',l:'Equipamento',t:'ref',ent:'equipamentos',filtro:ativoEquip,req:1},{k:'colabId',l:'Operador',t:'ref',ent:'colaboradores',filtro:ativoColab,req:1},
       {k:'nylon',l:'Nylon (quantidade)',t:'number',def:'0'},{k:'unNylon',l:'Unidade do nylon',t:'select',op:['metros','rolos','kg','unidades']},{k:'faca',l:'Faca (quantidade)',t:'number',step:'1',def:'0'},
       {k:'local',l:'Local / Frente'},{k:'obs',l:'Observação',t:'textarea'}],
@@ -541,7 +541,7 @@ const COLECOES_CONTRATO = ['colaboradores','equipamentos','custos','lli','ladoar
 /* ===================== MÓDULOS E ABAS ===================== */
 const MODULOS = [
   { id:'geral', nome:'Visão geral', abas:[ {nome:'Resumo do mês', painel:()=>painelGeral()} ] },
-  { id:'combustivel', nome:'Operação', abas:[ {nome:'Painel', painel:()=>painelCombustivel(), depois:()=>prepPainelComb()}, {nome:'Abastecimento de equipamento', painel:()=>cardSaldoComb()+telaEntidade('abastecimentos'), depois:()=>prepararForm('abastecimentos')}, {nome:'Abastecimento posto', painel:()=>cardSaldoComb(true)+telaEntidade('abastposto'), depois:()=>prepAbastPosto()}, {nome:'Nylon e Faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'Lado AR', painel:()=>telaLadoAr('ladoar'), depois:()=>prepLadoAr('ladoar')}, {nome:'Lado Terra', painel:()=>telaLadoAr('ladoterra'), depois:()=>prepLadoAr('ladoterra')} ] },   // abas de RH retiradas do Combustível (o RH fica no módulo RH)
+  { id:'combustivel', nome:'Operação', abas:[ {nome:'Painel', painel:()=>painelCombustivel(), depois:()=>prepPainelComb()}, {nome:'Abastecimento de equipamento', painel:()=>cardSaldoComb()+telaEntidade('abastecimentos'), depois:()=>prepararForm('abastecimentos')}, {nome:'Abastecimento posto', painel:()=>cardSaldoComb(true)+telaEntidade('abastposto'), depois:()=>prepAbastPosto()}, {nome:'Consumo de nylon e faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'Lado AR', painel:()=>telaLadoAr('ladoar'), depois:()=>prepLadoAr('ladoar')}, {nome:'Lado Terra', painel:()=>telaLadoAr('ladoterra'), depois:()=>prepLadoAr('ladoterra')} ] },   // abas de RH retiradas do Combustível (o RH fica no módulo RH)
   { id:'rh', nome:'RH', abas:[ {nome:'Painel', painel:()=>painelRH()}, {nome:'Ocorrências – calendário do mês', painel:()=>telaCalendarioRH(), depois:()=>prepCalendarioRH()}, {nome:'Quadro previsto e vagas', painel:()=>telaQuadroVagas(), depois:()=>{ prepararForm('quadro'); prepararForm('vagas'); }} ] },
   { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', painel:()=>graficoDispEquip() + telaEntidade('manutencoes'), depois:()=>prepararForm('manutencoes')}, {nome:'Documentos – CRLV e opacidade', painel:()=>telaDocsEquip(), depois:()=>prepDocsEquip()}, {nome:'Custos por equipamento', painel:()=>telaCustosEquip(), depois:()=>prepararForm('custos')}, {nome:'LLI', painel:()=>telaLLI(), depois:()=>prepLLI()} ] },
   { id:'cadastros', nome:'Cadastros', abas:[ {nome:'Colaboradores', ent:'colaboradores'}, {nome:'Equipamentos', ent:'equipamentos'} ] },
