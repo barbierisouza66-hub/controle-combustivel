@@ -248,7 +248,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '7.2';
+const VERSAO = '7.3';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -371,7 +371,7 @@ const sitTag = s => tag(s||'—', s==='Operando'||s==='Ativo'||s==='Concluída' 
 const MODULOS_OPCIONAIS = [['combustivel','Operação'],['rh','RH'],['equipamentos','Controle de Equipamentos']];   // Produção de Fardos retirada (os lançamentos antigos continuam guardados no banco)
 
 const ENT = {
-  contratos: { nome:'contrato', titulo:r=>r.nome, manter:['lli','precoLA','precoVias','precoLT','docs','acessos'], campos:[
+  contratos: { nome:'contrato', titulo:r=>r.nome, manter:['lli','precoLA','precoVias','precoLT','docs','acessos','ocultarSalario'], campos:[
       {k:'nome',l:'Nome do contrato',req:1},{k:'cliente',l:'Cliente'},{k:'local',l:'Unidade / Local'},{k:'numero',l:'Nº do contrato'},{k:'valorMensal',l:'Valor mensal do contrato (R$)',t:'moeda'},
       {k:'inicio',l:'Início',t:'date'},{k:'fim',l:'Término',t:'date'},{k:'status',l:'Situação',t:'select',op:['Ativo','Suspenso','Encerrado']},
       {k:'diasUteis',l:'Dias úteis por mês (RH)',t:'number',step:'1',def:'22'},{k:'jornada',l:'Jornada diária em horas (RH)',t:'number',step:'0.01',def:'8'},{k:'horasSemana',l:'Jornada semanal em horas (RH)',t:'number',step:'0.01',def:'44'},{k:'adicionalHE',l:'Adicional de HE dias úteis/sábado (%)',t:'number',step:'1',def:'50'},{k:'adicionalHE100',l:'Adicional de HE domingos e feriados (%)',t:'number',step:'1',def:'100'},{k:'feriadosExtras',l:'Feriados municipais/estaduais (dd/mm, separados por vírgula)'},{k:'folgaSemanal',l:'Folga semanal (dias abonados)',t:'select',op:['Sábado e domingo','Somente domingo']},{k:'diaPonto',l:'Período do ponto começa no dia (ex.: 11 = de 11 a 10 do mês seguinte)',t:'number',step:'1',def:'1'},{k:'regime',l:'Regime tributário da empresa',t:'select',op:['Lucro Real / Presumido','Simples Nacional (Anexos I, II, III e V)','Simples Nacional – Anexo IV']},{k:'ratPct',l:'RAT/SAT (%)',t:'number',step:'0.5',def:'3'},{k:'fap',l:'FAP (0,5 a 2,0)',t:'number',step:'0.0001',def:'1'},{k:'terceirosPct',l:'Terceiros (%)',t:'number',step:'0.1',def:'5.8'},{k:'fgtsPct',l:'FGTS (%)',t:'number',step:'0.1',def:'8'},
@@ -394,7 +394,7 @@ const ENT = {
       else if(hq > 0) el.horasSemana.value = +(5*hq).toFixed(2);
       [el.horasDia, el.horasSexta, el.horasSemana].forEach(i=>{ i.readOnly = auto; i.classList.toggle('calc', auto); });
       return temHorario(c) ? `Jornada calculada: Seg a Qui ${hhmm(hSegQui(c))}/dia · Sexta ${hhmm(hSex(c))} · Semana ${hhmm(jSem(c))} (divisor ${num(jSem(c)*5,0)} h) · Sábado, domingo e feriado = hora extra` : 'Preencha os horários de seg a qui e de sexta para o sistema calcular a jornada (sábado, domingo e feriado viram hora extra).'; },
-    cols:[col('Nome',r=>r.nome),col('Matrícula',r=>r.matricula),col('Função',r=>r.funcao),col('Admissão',r=>dataBR(r.admissao)),col('Telefone',r=>r.telefone),col('Turno',r=>r.turno||'Diurno'),col('Horário',r=>textoHorario(r)),col('Jornada/dia',r=>temHorario(r)?`${hhmm(hSegQui(r))} · sex ${hhmm(hSex(r))}`:hhmm(jDia(r)),{n:1}),col('Semana',r=>`${hhmm(jSem(r))} (÷${num(jSem(r)*5,0)})`,{n:1}),col('Valor/hora',r=>vHora(r)?brl(vHora(r)):'—',{n:1}),col('Situação',r=>sitTag(sitColab(r))+(sitColab(r)==='Afastado'&&r.dataAfast?`<div class="s">desde ${dataBR(r.dataAfast)}</div>`:''),{html:1})] },
+    cols:[col('Nome',r=>r.nome),col('Matrícula',r=>r.matricula),col('Função',r=>r.funcao),col('Admissão',r=>dataBR(r.admissao)),col('Telefone',r=>r.telefone),col('Turno',r=>r.turno||'Diurno'),col('Horário',r=>textoHorario(r)),col('Jornada/dia',r=>temHorario(r)?`${hhmm(hSegQui(r))} · sex ${hhmm(hSex(r))}`:hhmm(jDia(r)),{n:1}),col('Semana',r=>`${hhmm(jSem(r))} (÷${num(jSem(r)*5,0)})`,{n:1}),col('Valor/hora',r=>salOculto(r)?'🔒':vHora(r)?brl(vHora(r)):'—',{n:1}),col('Situação',r=>sitTag(sitColab(r))+(sitColab(r)==='Afastado'&&r.dataAfast?`<div class="s">desde ${dataBR(r.dataAfast)}</div>`:''),{html:1})] },
 
   equipamentos: { nome:'equipamento', titulo:r=>`${r.codigo}${r.controle?' (int. '+r.controle+')':''} – ${tipoEquip(r)}${r.modelo?' ('+r.modelo+')':''}`, ordem:(a,b)=>String(a.codigo).localeCompare(b.codigo), campos:[
       {k:'codigo',l:'Código / Patrimônio',req:1},{k:'controle',l:'Nº de controle interno'},{k:'tipo',l:'Tipo',t:'select',op:TIPOS_EQ},{k:'modelo',l:'Marca / Modelo'},{k:'placa',l:'Placa / Nº de série'},
@@ -566,6 +566,9 @@ const MODULOS = [
 const usuarioAtual = () => ($('#usuarioEmail')?.textContent || '').trim().toLowerCase();
 const acessoDe = c => (c?.acessos||[]).find(a=>String(a.email||'').trim().toLowerCase()===usuarioAtual());
 const usuarioRestrito = () => contratos.some(c=>acessoDe(c));
+// Salário oculto: regras por usuário (e-mail) → colaboradores cujo salário ele não pode ver
+const regraSal = () => (contrato?.ocultarSalario||[]).find(r=>String(r.email||'').trim().toLowerCase()===usuarioAtual());
+const salOculto = c => !!c && !!regraSal()?.colabs?.includes(c.id);
 const semReceita = () => { const a = acessoDe(contrato); return !!a && !(a.modulos||[]).includes('receita'); };
 const MODULOS_ACESSO = [['combustivel','Operação'],['rh','RH'],['equipamentos','Controle de Equipamentos'],['receita','Receita / Contrato'],['cadastros','Cadastros'],['geral','Visão geral']];
 const modulosDoContrato = () => { const ac = acessoDe(contrato); if(ac) return MODULOS.filter(x=>(ac.modulos||[]).includes(x.id)); const m = contrato?.modulos?.length ? contrato.modulos : MODULOS_OPCIONAIS.map(x=>x[0]); return MODULOS.filter(x=>x.id==='geral'||x.id==='cadastros'||x.id==='receita'||m.includes(x.id)); };
@@ -678,7 +681,8 @@ function prepararForm(k){
     E.campos.forEach(c=>{ if(c.se && !c.se(o)) delete o[c.k]; });
     const msg = E.validar?.(o); if(msg){ alert(msg); return; }
     E.campos.filter(c=>c.t==='moeda').forEach(c=>{ if(o[c.k]!==undefined) o[c.k] = o[c.k]==='' ? '' : String(numBR(o[c.k])); });
-    if(E.manter && o.id){ const ant = (k==='contratos' ? contratos : L(k)).find(x=>x.id===o.id); E.manter.forEach(m=>{ if(ant?.[m]!==undefined) o[m] = ant[m]; }); }   // documentos anexados etc.
+    if(E.manter && o.id){ const ant = (k==='contratos' ? contratos : L(k)).find(x=>x.id===o.id); E.manter.forEach(m=>{ if(ant?.[m]!==undefined) o[m] = ant[m]; }); }
+    if(k==='colaboradores' && o.id){ const ant = L(k).find(x=>x.id===o.id); if(salOculto(ant)){ o.salario = ant.salario ?? ''; o.valorHora = ant.valorHora ?? ''; } }   // documentos anexados etc.
     if(E.antesSalvar) o = E.antesSalvar(o);
     if(k!=='contratos' && !o.id) o.criadoPor = $('#usuarioEmail').textContent;
     try{ await gravar(k, o); }catch(err){ alert('Não foi possível salvar: '+(err.message||err)); return; }
@@ -698,6 +702,7 @@ function prepararForm(k){
 function limparForm(k){
   const f = $('#form_'+k); if(!f) return; const E = ENT[k];
   f.reset(); f.elements.id.value='';
+  if(k==='colaboradores') ['salario','valorHora'].forEach(n=>{ const el = f.elements[n]; if(el){ el.disabled = false; el.placeholder='0,00'; } });
   E.campos.forEach(c=>{
     const el = f.elements[c.k];
     if(c.t==='date' && !c.semDef && el) el.value = hoje();
@@ -724,6 +729,7 @@ function editarForm(k, id){
     el.value = c.t==='moeda' ? fmtBR(v) : v;
   });
   atualizarVisiveis(k);
+  if(k==='colaboradores'){ const oc = salOculto(bruto); ['salario','valorHora'].forEach(n=>{ const el = f.elements[n]; if(!el) return; if(oc){ el.value=''; el.placeholder='🔒 restrito'; } else el.placeholder='0,00'; el.disabled = oc; }); }
   const h = f.closest('.card')?.querySelector('h2'); if(h) h.textContent = 'Editando: '+E.nome;
   if(E.extra) $('#extra_'+k).textContent = E.extra(f);
   f.scrollIntoView({behavior:'smooth', block:'start'});
@@ -992,7 +998,7 @@ function prepReceitas(){
   });
 }
 function telaAcessos(){
-  if(acessoDe(contrato)) return '<div class="card"><p class="info" style="margin:0">Somente o administrador gerencia os acessos.</p></div>';
+  if(acessoDe(contrato) || regraSal()) return '<div class="card"><p class="info" style="margin:0">Somente o administrador gerencia os acessos.</p></div>';
   const ac = contrato.acessos || [];
   const chk = (pref, sel) => MODULOS_ACESSO.map(([id,n])=>`<label class="chk"><input type="checkbox" data-${pref}="${id}" ${sel.includes(id)?'checked':''}> ${n}</label>`).join('');
   const linhas = ac.map((a,i)=>`<tr><td><b>${esc(a.email)}</b>${a.nome?`<div class="s">${esc(a.nome)}</div>`:''}</td><td><div class="opcoes" data-linha="${i}">${chk('modac', a.modulos||[])}</div></td><td><button class="peq" data-salvarac="${i}">Salvar</button> <button class="peq del" data-removerac="${i}">Remover</button></td></tr>`).join('');
@@ -1002,9 +1008,31 @@ function telaAcessos(){
     <div class="grid"><label>E-mail do usuário<input id="acEmail" type="email" placeholder="nome@empresa.com.br"></label><label>Nome<input id="acNome" placeholder="ex.: João Pedro"></label></div>
     <div class="lbl" style="margin-top:8px">Módulos liberados<div class="opcoes">${chk('novomod', ['combustivel'])}</div></div>
     <button class="pri" id="acAdd" style="margin-top:10px">+ Adicionar acesso</button></div>
+    ${cardOcultarSalario()}
     <div class="card"><h2>Usuários com acesso limitado</h2>${ac.length?`<div class="tabela-wrap"><table><thead><tr><th>Usuário</th><th>Módulos liberados</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>`:'<p class="info" style="margin:0">Nenhum usuário com acesso limitado.</p>'}</div>`;
 }
+function cardOcultarSalario(){
+  const regras = contrato.ocultarSalario || [], cs = [...L('colaboradores')].sort((a,b)=>String(a.nome).localeCompare(String(b.nome)));
+  const linhas = regras.map((r,i)=>`<tr><td><b>${esc(r.email)}</b></td><td>${(r.colabs||[]).map(id=>esc(nomeColab(id))).join(', ')||'—'}</td><td><button class="peq del" data-remsal="${i}">Remover</button></td></tr>`).join('');
+  return `<div class="card"><h2>🔒 Ocultar salário de colaboradores</h2>
+    <p class="info">O usuário informado continua vendo tudo, menos o salário e o valor da hora dos colaboradores marcados (no cadastro, no calendário do RH e no demonstrativo).</p>
+    <div class="grid"><label>E-mail do usuário<input id="osEmail" type="email" placeholder="nome@empresa.com.br"></label></div>
+    <div class="lbl" style="margin-top:8px">Colaboradores com salário oculto<div class="opcoes">${cs.map(c=>`<label class="chk"><input type="checkbox" data-oscolab="${c.id}"> ${esc(c.nome)}${c.funcao?` <span class="s">(${esc(c.funcao)})</span>`:''}</label>`).join('')}</div></div>
+    <button class="pri" id="osAdd" style="margin-top:10px">Salvar restrição</button>
+    ${regras.length?`<div class="tabela-wrap" style="margin-top:12px"><table><thead><tr><th>Usuário</th><th>Salário oculto de</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>`:''}</div>`;
+}
 function prepAcessos(){
+  $('#osAdd')?.addEventListener('click', async ()=>{
+    const email = $('#osEmail').value.trim().toLowerCase(), colabs = [...document.querySelectorAll('[data-oscolab]:checked')].map(i=>i.dataset.oscolab);
+    if(!/^\S+@\S+\.\S+$/.test(email)){ alert('Informe um e-mail válido.'); return; }
+    if(!colabs.length){ alert('Marque pelo menos um colaborador.'); return; }
+    const regras = (contrato.ocultarSalario||[]).filter(r=>r.email!==email).concat([{ email, colabs }]);
+    try{ await salvarContrato({ ocultarSalario:regras }); toast('Restrição de salário salva.'); renderTudo(); }catch(e){ alert('Não foi possível salvar: '+(e.message||e)); }
+  });
+  document.querySelectorAll('[data-remsal]').forEach(b=>b.addEventListener('click', async ()=>{
+    const i = +b.dataset.remsal, r = (contrato.ocultarSalario||[])[i]; if(!r || !confirm(`Remover a restrição de salário de ${r.email}?`)) return;
+    try{ await salvarContrato({ ocultarSalario:(contrato.ocultarSalario||[]).filter((_,j)=>j!==i) }); toast('Restrição removida.'); renderTudo(); }catch(e){ alert('Não foi possível salvar: '+(e.message||e)); }
+  }));
   $('#acAdd')?.addEventListener('click', async ()=>{
     const email = $('#acEmail').value.trim().toLowerCase(), mods = [...document.querySelectorAll('[data-novomod]:checked')].map(i=>i.dataset.novomod);
     if(!/^\S+@\S+\.\S+$/.test(email)){ alert('Informe um e-mail válido.'); return; }
@@ -1890,7 +1918,7 @@ function telaCalendarioRH(){
       <b title="Período de apuração do ponto (ajuste no cadastro do contrato)">${per.texto}</b><span class="info" style="margin:0">${esc(c.funcao||'')}${c.funcao?' · ':''}${temHorario(c) ? `Seg–Qui ${c.sqEntrada}–${c.sqSaida} (${hhmm(hSegQui(c))}) · Sex ${c.sxEntrada}–${c.sxSaida} (${hhmm(hSex(c))}) · ${hhmm(jSem(c))}/semana · sáb, dom e feriado = HE` : `jornada ${num(jDia(c))} h seg–sex · sábado ${num(jSab)} h · ${num(jSem(c))} h/semana · <b>cadastre o horário do colaborador</b>`}</span><span style="flex:1"></span>
       <button id="calUteis">Marcar dias úteis vazios como Presença (até hoje)</button><button class="pri" id="calSalvar">Salvar mês</button></div>
     <div class="valorbox"><b>💰 Valor financeiro de ${esc(c.nome)}</b>
-      <label>Salário mensal (R$) <input type="text" inputmode="decimal" id="calSal" value="${sal?fmtBR(+sal.toFixed(2)):''}" placeholder="Ex.: 2.400,00" autocomplete="off"></label>
+      ${salOculto(c) ? `<label>Salário mensal (R$) <input type="text" id="calSal" value="" placeholder="🔒 restrito" disabled></label>` : `<label>Salário mensal (R$) <input type="text" inputmode="decimal" id="calSal" value="${sal?fmtBR(+sal.toFixed(2)):''}" placeholder="Ex.: 2.400,00" autocomplete="off"></label>`}
       <span class="info" style="margin:0;color:var(--ink)">Valor da hora: <b id="calVHtxt">—</b> (salário ÷ ${num(div,0)} h)<br>HE dias úteis/sábado +${num(pctHE(),0)}% · domingos e feriados +${num(pctHE100(),0)}%</span></div>
     <div class="kpis" id="calResumo"></div><div id="calValores"></div>
     <div class="tabela-wrap"><div class="cal">${DIAS_CURTOS.map(x=>`<div class="cab">${x}</div>`).join('')}${cel.join('')}</div></div>
@@ -1953,6 +1981,7 @@ function resumoCal(){
   $('#calResumo').innerHTML = kpi('Presenças', vs.filter(v=>v.P).length) + kpi('Ausências', vs.filter(v=>v.A).length, faltas+' faltas sem atestado')
     + kpi('Com atestado', vs.filter(v=>v.AT).length) + kpi('Dias abonados', abonados, `folgas${domFer?' e feriados':''} sem trabalho${abonadosMotivo?` + ${abonadosMotivo} abono(s)`:''}`) + kpi('Horas trabalhadas no mês', hhmm(acH), hNao?`${hhmm(hNao)} abaixo da jornada`:'')
     + kpi('Horas extras no mês', hhmm(acHE), `50%: ${hhmm(h50)} · 100%: ${hhmm(h100)}`);
+  if(salOculto(c)){ $('#calValores').innerHTML = '<div class="card"><p style="margin:0">🔒 As informações de salário deste colaborador são restritas para o seu usuário.</p></div>'; return; }
   if(!sal){ $('#calValores').innerHTML = `<div class="card"><p style="margin:0">Informe o <b>salário mensal</b> no quadro verde acima para ver o cálculo financeiro (horas extras, DSR e descontos).</p></div>`; return; }
   const lin = (desc, ref, val, cls='') => `<tr class="${cls}"><td>${desc}</td><td class="num">${ref}</td><td class="num">${val}</td></tr>`;
   const avisoSal = sal < 500 ? `<p class="alerta">⚠️ O salário está como <b>${brl(sal)}</b>, o que parece incorreto. Digite o valor completo no quadro verde (ex.: <b>2.400,00</b>) e clique em <b>Salvar mês</b>.</p>` : '';
@@ -2075,7 +2104,7 @@ function telaDoContrato(){
   if(!mods.some(m=>m.id===est.mod)){ est.mod=mods[0]?.id||'geral'; est.aba=0; }
   if(!mods.length){ $('#conteudo').innerHTML = '<div class="card"><p>Seu usuário não tem módulos liberados neste contrato. Fale com o administrador.</p></div>'; return; }
   const mod = mods.find(m=>m.id===est.mod), aba = mod.abas[est.aba] || mod.abas[0];
-  $('#btnContratos').hidden = false; $('#btnBackup').hidden = usuarioRestrito();
+  $('#btnContratos').hidden = false; $('#btnBackup').hidden = usuarioRestrito() || !!regraSal();
   const bc = $('#barraContrato'); bc.hidden = false;
   bc.innerHTML = `<div><div class="nome">${esc(contrato.nome)}</div><div class="sub">${esc([contrato.cliente,contrato.local].filter(Boolean).join(' · '))}</div></div>
     <div class="mes"><label style="flex-direction:row;align-items:center;gap:6px">Mês <input type="month" id="mesRef" value="${est.mes}" ${est.mes?'':'disabled'}></label>
