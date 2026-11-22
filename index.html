@@ -248,7 +248,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '6.8';
+const VERSAO = '6.9';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -371,7 +371,7 @@ const sitTag = s => tag(s||'—', s==='Operando'||s==='Ativo'||s==='Concluída' 
 const MODULOS_OPCIONAIS = [['combustivel','Operação'],['rh','RH'],['equipamentos','Controle de Equipamentos']];   // Produção de Fardos retirada (os lançamentos antigos continuam guardados no banco)
 
 const ENT = {
-  contratos: { nome:'contrato', titulo:r=>r.nome, manter:['lli','precoLA','precoVias'], campos:[
+  contratos: { nome:'contrato', titulo:r=>r.nome, manter:['lli','precoLA','precoVias','precoLT'], campos:[
       {k:'nome',l:'Nome do contrato',req:1},{k:'cliente',l:'Cliente'},{k:'local',l:'Unidade / Local'},{k:'numero',l:'Nº do contrato'},{k:'valorMensal',l:'Valor mensal do contrato (R$)',t:'moeda'},
       {k:'inicio',l:'Início',t:'date'},{k:'fim',l:'Término',t:'date'},{k:'status',l:'Situação',t:'select',op:['Ativo','Suspenso','Encerrado']},
       {k:'diasUteis',l:'Dias úteis por mês (RH)',t:'number',step:'1',def:'22'},{k:'jornada',l:'Jornada diária em horas (RH)',t:'number',step:'0.01',def:'8'},{k:'horasSemana',l:'Jornada semanal em horas (RH)',t:'number',step:'0.01',def:'44'},{k:'adicionalHE',l:'Adicional de HE dias úteis/sábado (%)',t:'number',step:'1',def:'50'},{k:'adicionalHE100',l:'Adicional de HE domingos e feriados (%)',t:'number',step:'1',def:'100'},{k:'feriadosExtras',l:'Feriados municipais/estaduais (dd/mm, separados por vírgula)'},{k:'folgaSemanal',l:'Folga semanal (dias abonados)',t:'select',op:['Sábado e domingo','Somente domingo']},{k:'diaPonto',l:'Período do ponto começa no dia (ex.: 11 = de 11 a 10 do mês seguinte)',t:'number',step:'1',def:'1'},{k:'regime',l:'Regime tributário da empresa',t:'select',op:['Lucro Real / Presumido','Simples Nacional (Anexos I, II, III e V)','Simples Nacional – Anexo IV']},{k:'ratPct',l:'RAT/SAT (%)',t:'number',step:'0.5',def:'3'},{k:'fap',l:'FAP (0,5 a 2,0)',t:'number',step:'0.0001',def:'1'},{k:'terceirosPct',l:'Terceiros (%)',t:'number',step:'0.1',def:'5.8'},{k:'fgtsPct',l:'FGTS (%)',t:'number',step:'0.1',def:'8'},
@@ -511,7 +511,7 @@ const ENT = {
     validar:o=>o.cicloIni && o.cicloFim && o.cicloFim < o.cicloIni ? 'O fim do ciclo não pode ser antes do início.' : '',
     cols:[col('Área',r=>r.area),col('Localização',r=>r.localizacao),col('Ciclo',r=>`${dataBR(r.cicloIni).slice(0,5)} a ${dataBR(r.cicloFim).slice(0,5)}`),col('Metragem prev. (m²)',r=>num(r.metragem,0),{n:1,tot:l=>num(soma(l,r=>r.metragem),0)}),
       col('Status',r=>tag(r.status||'Não executada', CLS_LA[r.status||'Não executada']),{html:1}),col('Metragem finalizada (m²)',r=>r.metragemFinal?num(r.metragemFinal,0):'',{n:1,tot:l=>num(soma(l,r=>r.metragemFinal),0)}),
-      col('Conclusão',r=>dataBR(r.dataConclusao)),col('Receita (R$)',r=>{ const v = valorAreaLA(r); return v ? (r.status==='Executada' ? `<b style="color:#1f6f4a">${brl(v)}</b>` : `<span class="s">${brl(v)}</span>`) : ''; },{n:1,html:1,tot:l=>brl(soma(l.filter(r=>r.status==='Executada'),valorAreaLA))+' executado'}),col('Atualizar status',r=>`<select class="lastatus" data-lastatus="${r.id}">${STATUS_LA.map(s=>`<option ${s===(r.status||'Não executada')?'selected':''}>${s}</option>`).join('')}</select>`,{html:1}),col('Observação',r=>r.obs)] },
+      col('Conclusão',r=>dataBR(r.dataConclusao)),col('Receita (R$)',r=>{ const v = valorAreaLA(r); return v ? (r.status==='Executada' ? `<b style="color:#1f6f4a">${brl(v)}</b>` : `<span class="s">${brl(v)}</span>`) : ''; },{n:1,html:1,tot:l=>brl(soma(l.filter(r=>r.status==='Executada'),r=>valorAreaLA(r)))+' executado'}),col('Atualizar status',r=>`<select class="lastatus" data-lastatus="${r.id}">${STATUS_LA.map(s=>`<option ${s===(r.status||'Não executada')?'selected':''}>${s}</option>`).join('')}</select>`,{html:1}),col('Observação',r=>r.obs)] },
 
   custos: { nome:'custo do equipamento', data:'data', campos:[
       {k:'data',l:'Data',t:'date',req:1},{k:'equipId',l:'Equipamento',t:'ref',ent:'equipamentos',filtro:()=>true,req:1},
@@ -538,7 +538,7 @@ const ENT = {
       col('kg/fardo',r=>(+r.peso&&+r.quantidade)?num(r.peso/r.quantidade,1):'',{n:1,tot:l=>{const q=soma(l,r=>r.quantidade),p=soma(l,r=>r.peso);return q&&p?num(p/q,1):'';}}),
       col('Operador',r=>r.colabId?nomeColab(r.colabId):'')] },
 };
-ENT.ladoterra = { ...ENT.ladoar, cols:ENT.ladoar.cols.filter(c=>c.l!=='Receita (R$)'), nome:'área do Lado Terra', filtroLista:r=>cicloLA(r)===cicloAtualLA('ladoterra') };
+ENT.ladoterra = { ...ENT.ladoar, nome:'área do Lado Terra', filtroLista:r=>cicloLA(r)===cicloAtualLA('ladoterra') };
 ENT.frequencia = { nome:'frequência', data:'data', campos:[], cols:[] };
 // Ocorrências antigas tinham só "tipo": aqui viram situação/motivo/atestado.
 function situacaoOc(r){
@@ -874,35 +874,42 @@ function custosDoMes(m){
 }
 function painelReceita(){
   const mes = est.mes, rec = doMes(L('receitas'),'competencia'), periodo = mes ? mesBR(mes) : 'todos os meses';
-  const vm = +contrato?.valorMensal || valorCicloLA() + (+precoVias()||0), prodLA = receitaLAMes(mes), vias = receitaViasMes(mes), outras = rec.filter(r=>r.tipo!=='Medição mensal');
-  const total = prodLA + vias + soma(outras, valRec), glosa = -soma(rec.filter(r=>valRec(r)<0), valRec);
+  const cLT = cicloAtualLA('ladoterra'), vm = +contrato?.valorMensal || valorCicloLA() + (+precoVias()||0) + (cLT?valorCiclo('ladoterra', cLT):0), prodLA = receitaLAMes(mes), prodLT = receitaLadoMes('ladoterra', mes), vias = receitaViasMes(mes), outras = rec.filter(r=>r.tipo!=='Medição mensal');
+  const total = prodLA + prodLT + vias + soma(outras, valRec), glosa = -soma(rec.filter(r=>valRec(r)<0), valRec);
   const pos = rec.filter(r=>valRec(r)>0), fat = soma(pos.filter(r=>(r.status||'A faturar')!=='A faturar'), valRec), recebido = soma(pos.filter(r=>r.status==='Recebida'), valRec), aFat = soma(pos.filter(r=>(r.status||'A faturar')==='A faturar'), valRec);
   const c = custosDoMes(mes), res = total - c.tot, marg = total ? res/total*100 : null;
   const abertas = L('receitas').filter(r=>r.status==='Faturada' && valRec(r)>0).sort((a,b)=>String(a.vencimento||'9').localeCompare(String(b.vencimento||'9')));
   const venc = abertas.filter(vencidaRec), diasAtraso = r => Math.round((new Date(hoje()+'T12:00:00')-new Date(r.vencimento+'T12:00:00'))/864e5);
-  const pl = precoLA(), cicloAt = cicloAtualLA('ladoar'), lc = cicloAt ? L('ladoar').filter(r=>cicloLA(r)===cicloAt) : [], vE = soma(lc.filter(r=>r.status==='Executada'),valorAreaLA), vA = soma(lc.filter(r=>r.status==='Em andamento'),valorAreaLA), vC = valorCicloLA();
-  const prod = `<div class="card"><h2>Receita do contrato – Lado AR e limpeza de vias</h2>
-    <div class="filtros" style="align-items:flex-end;gap:12px;margin-bottom:10px"><label>Serviço mensal (R$)<input id="plMensal" inputmode="decimal" value="${fmtBR(pl.mensal)}" style="width:140px"></label><label>Serviço bimestral (R$)<input id="plBim" inputmode="decimal" value="${fmtBR(pl.bimestral)}" style="width:140px"></label><label>Limpeza especial de vias – fixo/mês (R$)<input id="plVias" inputmode="decimal" value="${fmtBR(precoVias())}" style="width:170px"></label><button id="plSalvar">Salvar preços</button>
-    <span class="info" style="margin:0">Lado AR por ciclo mensal: <b>${brl(vC)}</b> (mensal + bimestral ÷ 2) · Limpeza de vias: <b>${brl(precoVias())}</b> fixo todo mês · Total mensal: <b>${brl(vC + (+precoVias()||0))}</b>. Cada área vale a sua parte da metragem do ciclo; a receita entra quando a área fica <b>Executada</b>.</span></div>
-    ${cicloAt?`<div style="display:flex;justify-content:space-between;font-size:13px"><b>Ciclo ${rotuloCicloLA(cicloAt)}</b><span>${brl(vE)} executado de ${brl(vC)} (${vC?num(vE/vC*100,1):0}%)</span></div>
-    <div class="dispbar" style="margin:4px 0"><i style="width:${vC?vE/vC*100:0}%;background:${COR_LA['Executada']}">${vC&&vE/vC>=.08?brl(vE):''}</i><i style="width:${vC?vA/vC*100:0}%;background:${COR_LA['Em andamento']}">${vC&&vA/vC>=.12?brl(vA):''}</i><i style="flex:1;background:#e6e9e7"></i></div>
-    ${legendaG([['Receita já executada',COR_LA['Executada']],['Em andamento (entra quando concluir)',COR_LA['Em andamento']],['A executar','#cfd6d2']])}`:'<p class="info" style="margin:0">Cadastre as áreas do Lado AR em Operação → Lado AR.</p>'}</div>`;
+  const pl = precoLA(), pt = precoLT(), vC = valorCicloLA();
+  const barra = k => { const c = cicloAtualLA(k); if(!c) return `<p class="info" style="margin:6px 0">Cadastre as áreas do ${LADOS[k]} em Operação → ${LADOS[k]}.</p>`;
+    const lc = L(k).filter(r=>cicloLA(r)===c), V = valorCiclo(k, c), vE = soma(lc.filter(r=>r.status==='Executada'),r=>valorAreaLA(r,k)), vA = soma(lc.filter(r=>r.status==='Em andamento'),r=>valorAreaLA(r,k));
+    const extra = k==='ladoterra' ? ` · ${num(soma(lc,r=>r.metragem),0)} m² no ciclo · período ${periodoLT(c).toLowerCase()}` : '';
+    return `<div style="margin:10px 0 4px"><div style="display:flex;justify-content:space-between;font-size:13px;gap:10px;flex-wrap:wrap"><b>${LADOS[k]} – ciclo ${rotuloCicloLA(c)}</b><span>${brl(vE)} executado de ${brl(V)} (<b>${V?num(vE/V*100,1):0}%</b>)${extra}</span></div>
+    <div class="dispbar" style="margin:4px 0"><i style="width:${V?vE/V*100:0}%;background:${COR_LA['Executada']}">${V&&vE/V>=.1?num(vE/V*100,0)+'%':''}</i><i style="width:${V?vA/V*100:0}%;background:${COR_LA['Em andamento']}">${V&&vA/V>=.1?num(vA/V*100,0)+'%':''}</i><i style="flex:1;background:#e6e9e7"></i></div></div>`; };
+  const prod = `<div class="card"><h2>Receita do contrato – Lado AR, Lado Terra e limpeza de vias</h2>
+    <div class="filtros" style="align-items:flex-end;gap:12px;margin-bottom:6px"><b style="width:100%">Lado AR</b><label>Serviço mensal (R$)<input id="plMensal" inputmode="decimal" value="${fmtBR(pl.mensal)}" style="width:130px"></label><label>Serviço bimestral (R$)<input id="plBim" inputmode="decimal" value="${fmtBR(pl.bimestral)}" style="width:130px"></label><label>Limpeza especial de vias – fixo/mês (R$)<input id="plVias" inputmode="decimal" value="${fmtBR(precoVias())}" style="width:150px"></label></div>
+    <div class="filtros" style="align-items:flex-end;gap:12px;margin-bottom:10px"><b style="width:100%">Lado Terra</b><label>Fixo mensal (R$)<input id="ltFixo" inputmode="decimal" value="${fmtBR(pt.fixo)}" style="width:130px"></label><label>Mínimo (m²)<input id="ltMin" inputmode="decimal" value="${fmtBR(pt.minimo)}" style="width:110px"></label><label>Excedente seco (R$/m²)<input id="ltSeco" inputmode="decimal" value="${fmtBR(pt.seco)}" style="width:100px"></label><label>Excedente chuvoso (R$/m²)<input id="ltChuv" inputmode="decimal" value="${fmtBR(pt.chuvoso)}" style="width:100px"></label>
+      <label>Período<select id="ltPer">${['Automático','Seco','Chuvoso'].map(o=>`<option ${o===pt.periodo?'selected':''}>${o}</option>`).join('')}</select></label><button id="plSalvar">Salvar preços</button></div>
+    <p class="info" style="margin:0 0 4px">Lado AR: <b>${brl(vC)}</b> por ciclo (mensal + bimestral ÷ 2). Lado Terra: fixo de ${brl(pt.fixo)} até ${num(pt.minimo,0)} m² + excedente por m² (automático: outubro a março = chuvoso, abril a setembro = seco). Vias: <b>${brl(precoVias())}</b> fixo todo mês. Cada área vale a sua parte da metragem do ciclo; a receita entra quando a área fica <b>Executada</b>.</p>
+    ${barra('ladoar')}${barra('ladoterra')}
+    ${legendaG([['Receita já executada',COR_LA['Executada']],['Em andamento (entra quando concluir)',COR_LA['Em andamento']],['A executar','#cfd6d2']])}</div>`;
   const cfg = `<div class="card filtros" style="align-items:flex-end;gap:12px"><label>Valor mensal do contrato (R$)<input id="recVM" inputmode="decimal" value="${vm?fmtBR(vm):''}" placeholder="0,00" style="width:160px"></label><button id="recSalvarVM">Salvar valor</button>
     <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="recSal" ${est.recSal===false?'':'checked'}> incluir salários cadastrados nos custos</label><span style="flex:1"></span><span class="info" style="margin:0">${periodo} · troque o mês no seletor do topo</span></div>`;
-  const kpis = `<div class="kpis">${kpi('Receita do período', brl(total), (mes&&vm?`${num(total/vm*100,1)}% do valor mensal · `:'')+'Lado AR '+brl(prodLA)+' · vias '+brl(vias))}
+  const kpis = `<div class="kpis">${kpi('Receita do período', brl(total), (mes&&vm?`${num(total/vm*100,1)}% do valor mensal · `:'')+'AR '+brl(prodLA)+' · Terra '+brl(prodLT)+' · vias '+brl(vias))}
     ${kpi('Faturado', brl(fat), aFat?brl(aFat)+' ainda a faturar':'nada pendente de faturar')}${kpi('Recebido', brl(recebido), fat?num(recebido/fat*100,0)+'% do faturado':'')}
     ${kpi('Custos do contrato', brl(c.tot), mes?'combustível, manutenção, outros'+(c.pes?' e salários':''):'escolha um mês para ver os custos')}
     ${kpi('Resultado', `<span style="color:${res<0?'#b42318':'#1f6f4a'}">${brl(res)}</span>`, marg===null?'':'margem de '+num(marg,1)+'%')}${kpi('Glosas / descontos', brl(glosa), '')}</div>`;
   const comp = mes ? `<div class="card"><h2>Composição do resultado – ${periodo}</h2><div class="tabela-wrap"><table><tbody>
       <tr><td>Lado AR – áreas executadas <span class="s">automático, pela execução das ordens</span></td><td class="num">${brl(prodLA)}</td></tr>
+      <tr><td>Lado Terra – áreas executadas <span class="s">automático, pela execução das ordens</span></td><td class="num">${brl(prodLT)}</td></tr>
       <tr><td>Limpeza especial de vias <span class="s">fixo mensal</span></td><td class="num">${brl(vias)}</td></tr>
-      <tr><td>Serviços extras, aditivos e outros</td><td class="num">${brl(total+glosa-prodLA-vias)}</td></tr><tr><td>(−) Glosas / descontos</td><td class="num" style="color:#b42318">${brl(-glosa)}</td></tr>
+      <tr><td>Serviços extras, aditivos e outros</td><td class="num">${brl(total+glosa-prodLA-prodLT-vias)}</td></tr><tr><td>(−) Glosas / descontos</td><td class="num" style="color:#b42318">${brl(-glosa)}</td></tr>
       <tr class="total"><td>= Receita líquida</td><td class="num">${brl(total)}</td></tr>
       <tr><td>(−) Combustível <span class="s">litros × valor do litro</span></td><td class="num">${brl(c.comb)}</td></tr><tr><td>(−) Manutenções</td><td class="num">${brl(c.man)}</td></tr>
       <tr><td>(−) Outros custos dos equipamentos</td><td class="num">${brl(c.out)}</td></tr>${est.recSal===false?'':`<tr><td>(−) Salários cadastrados <span class="s">sem encargos e benefícios</span></td><td class="num">${brl(c.pes)}</td></tr>`}
       <tr class="total"><td>= Resultado</td><td class="num" style="color:${res<0?'#b42318':'#1f6f4a'}">${brl(res)}</td></tr></tbody></table></div></div>` : '';
   const ms = mesesAtras(mes || hoje().slice(0,7), 12);
-  const serie = ms.map(m=>{ const r = receitaLAMes(m) + receitaViasMes(m) + soma(L('receitas').filter(x=>String(x.competencia).slice(0,7)===m && x.tipo!=='Medição mensal'), valRec), cu = custosDoMes(m).tot; return { r:mesBR(m).split(' de ')[0].slice(0,3), t:mesBR(m), v:r, v2:cu, res:r-cu }; });
+  const serie = ms.map(m=>{ const r = receitaLAMes(m) + receitaLadoMes('ladoterra', m) + receitaViasMes(m) + soma(L('receitas').filter(x=>String(x.competencia).slice(0,7)===m && x.tipo!=='Medição mensal'), valRec), cu = custosDoMes(m).tot; return { r:mesBR(m).split(' de ')[0].slice(0,3), t:mesBR(m), v:r, v2:cu, res:r-cu }; });
   const graf = `<div class="card"><h2>Receita × custos – últimos 12 meses</h2>${svgBarras(serie,{cor:'#1f6f4a', cor2:'#b42318', fmt:brl, fmt2:brl, fmtEixo:v=>num(v/1000,0)+' mil', sub:p=>(p.v||p.v2)?(p.res<0?'−':'')+num(Math.abs(p.res)/1000,1)+' mil':'', corSub:'#1d2420'})}
     ${legendaG([['Receita',COR_G.comb],['Custos','#b42318'],['Resultado (embaixo, em R$ mil)','#1d2420']])}${vm?`<div class="s">Valor mensal do contrato: ${brl(vm)}</div>`:''}</div>`;
   const receber = `<div class="card"><h2>Contas a receber</h2>${abertas.length?`<div class="tabela-wrap"><table><thead><tr><th>Competência</th><th>NF</th><th>Descrição</th><th class="num">Valor</th><th>Vencimento</th><th>Situação</th></tr></thead><tbody>
@@ -917,7 +924,7 @@ function prepReceita(){
   });
   $('#recSal')?.addEventListener('change', e=>{ est.recSal = e.target.checked; renderTudo(); });
   $('#plSalvar')?.addEventListener('click', async ()=>{
-    const m = numBR($('#plMensal').value), b = numBR($('#plBim').value); const v = numBR($('#plVias').value), o = { ...contrato, precoLA:{ mensal:+m||0, bimestral:+b||0 }, precoVias:+v||0 };
+    const m = numBR($('#plMensal').value), b = numBR($('#plBim').value); const v = numBR($('#plVias').value), n = id => +numBR($(id).value)||0, o = { ...contrato, precoLA:{ mensal:+m||0, bimestral:+b||0 }, precoVias:+v||0, precoLT:{ fixo:n('#ltFixo'), minimo:n('#ltMin'), seco:n('#ltSeco'), chuvoso:n('#ltChuv'), periodo:$('#ltPer').value } };
     try{ await gravar('contratos', o); contrato = o; const i = contratos.findIndex(x=>x.id===o.id); if(i>-1) contratos[i] = o; toast('Preços salvos.'); renderTudo(); }catch(e){ alert('Não foi possível salvar: '+(e.message||e)); }
   });
 }
@@ -1168,9 +1175,17 @@ const cicloLA = r => `${r.cicloIni}|${r.cicloFim}`;
 // Preço do Lado AR (planilha de quantidades e preços): serviço mensal + serviço bimestral (÷ 2 por mês). A receita entra conforme as áreas são executadas.
 const precoLA = () => contrato?.precoLA || { mensal:76284.27, bimestral:94306.63 };
 const valorCicloLA = () => (+precoLA().mensal||0) + (+precoLA().bimestral||0)/2;
-function valorAreaLA(r){
-  const l = L('ladoar').filter(x=>cicloLA(x)===cicloLA(r)), tot = soma(l, x=>x.metragem);
-  return tot && +r.metragem ? valorCicloLA() * (+r.metragem)/tot : 0;
+// Lado Terra: fixo mensal até a metragem mínima (250.000 m²) + excedente por m² (período seco ou chuvoso)
+const precoLT = () => ({ fixo:89381.60, minimo:250000, seco:0.235, chuvoso:0.161, periodo:'Automático', ...(contrato?.precoLT||{}) });
+const periodoLT = c => { const p = precoLT().periodo; if(p==='Seco'||p==='Chuvoso') return p; const m = +String(c||'').split('|')[1]?.slice(5,7); return [10,11,12,1,2,3].includes(m) ? 'Chuvoso' : 'Seco'; };   // automático: out–mar chuvoso
+function valorCiclo(k, c){
+  if(k==='ladoar') return valorCicloLA();
+  const p = precoLT(), tot = soma(L('ladoterra').filter(x=>cicloLA(x)===c), x=>x.metragem), exc = Math.max(0, tot - (+p.minimo||0));
+  return (+p.fixo||0) + exc * (+(periodoLT(c)==='Seco' ? p.seco : p.chuvoso)||0);
+}
+function valorAreaLA(r, k=ladoLA){
+  const c = cicloLA(r), tot = soma(L(k).filter(x=>cicloLA(x)===c), x=>x.metragem);
+  return tot && +r.metragem ? valorCiclo(k, c) * (+r.metragem)/tot : 0;
 }
 // Limpeza especial de vias: valor fixo mensal (planilha), entra todo mês desde o início do contrato até o mês atual
 const precoVias = () => contrato?.precoVias ?? 19567.26;
@@ -1180,7 +1195,8 @@ function receitaViasMes(m){
   if(m) return m>=ini && m<=atual ? +precoVias()||0 : 0;
   const [a1,m1] = ini.split('-').map(Number), [a2,m2] = atual.split('-').map(Number); return Math.max(0, (a2-a1)*12 + m2-m1 + 1) * (+precoVias()||0);
 }
-const receitaLAMes = m => soma(L('ladoar').filter(r=>r.status==='Executada' && (!m || String(r.dataConclusao||'').slice(0,7)===m)), valorAreaLA);
+const receitaLadoMes = (k, m) => soma(L(k).filter(r=>r.status==='Executada' && (!m || String(r.dataConclusao||'').slice(0,7)===m)), r=>valorAreaLA(r, k));
+const receitaLAMes = m => receitaLadoMes('ladoar', m);
 const LADOS = { ladoar:'Lado AR', ladoterra:'Lado Terra' }; let ladoLA = 'ladoar';   // lado em exibição (mesma tela para Lado AR e Lado Terra)
 function ciclosLA(k=ladoLA){ return [...new Set(L(k).map(cicloLA))].sort().reverse(); }
 function cicloAtualLA(k=ladoLA){ const cs = ciclosLA(k), sel = (est.cicloLA||{})[k]; if(cs.includes(sel)) return sel; const h = hoje(); return cs.find(c=>{ const [i,f]=c.split('|'); return i<=h && h<=f; }) || cs[0] || ''; }
@@ -1219,7 +1235,7 @@ function telaLadoAr(k='ladoar'){
   const opcoes = ciclosLA().map(x=>`<option value="${x}" ${x===c?'selected':''}>${rotuloCicloLA(x)}</option>`).join('');
   const kpis = `<div class="kpis">${kpi('Áreas executadas', `${porSt('Executada').length} de ${l.length}`, `${pc(mExec)}% da metragem`)}${kpi('Metragem executada', num(mExec,0)+' m²', `de ${num(prev,0)} m² previstos`)}
     ${kpi('Em andamento', porSt('Em andamento').length, num(m2('Em andamento'),0)+' m²')}${kpi('Não executadas', porSt('Não executada').length, num(m2('Não executada'),0)+' m²')}
-    ${ladoLA==='ladoar' && valorCicloLA() ? kpi('Receita executada', `<span style="color:#1f6f4a">${brl(soma(porSt('Executada'),valorAreaLA))}</span>`, `de ${brl(valorCicloLA())} do ciclo · ${brl(soma(porSt('Em andamento'),valorAreaLA))} em andamento`) : ''}</div>`;
+    ${valorCiclo(ladoLA, c) ? kpi('Receita executada', `<span style="color:#1f6f4a">${brl(soma(porSt('Executada'),r=>valorAreaLA(r)))}</span>`, `de ${brl(valorCiclo(ladoLA, c))} do ciclo (${num(soma(porSt('Executada'),r=>valorAreaLA(r))/valorCiclo(ladoLA, c)*100,1)}%) · ${brl(soma(porSt('Em andamento'),r=>valorAreaLA(r)))} em andamento`) : ''}</div>`;
   const barra = prev ? `<div class="dispbar" style="margin:10px 0 4px">${STATUS_LA.slice().reverse().map(s=>{ const v = m2(s); return v ? `<i style="width:${v/prev*100}%;background:${COR_LA[s]}" title="${s}: ${num(v,0)} m²">${pc(v)>=6?pc(v)+'%':''}</i>` : ''; }).join('')}</div>
     <div class="faixas" style="margin-bottom:10px">${STATUS_LA.slice().reverse().map(s=>`<div><i style="background:${COR_LA[s]}"></i>${s}: <b>${porSt(s).length}</b> área(s) · ${num(m2(s),0)} m²</div>`).join('')}</div>` : '';
   return `<div class="card"><div class="filtros"><h2 style="margin:0">${LADOS[ladoLA]} – andamento do ciclo</h2><span style="flex:1"></span>
