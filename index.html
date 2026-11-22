@@ -248,7 +248,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '6.4';
+const VERSAO = '6.5';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -773,8 +773,76 @@ function painelCombustivel(){
   return filtro + `<div class="kpis">${kpi('Combustível', num(r.lit)+' L', r.custo?brl(r.custo):'sem valor informado')}${kpi('Tratores', num(r.tra)+' L')}${kpi('Roçadeiras', num(r.roc)+' L')}${kpi('Giro Zero', num(r.giro)+' L')}${kpi('Roçadeiras de arraste', num(r.arrS+r.arrD+r.arrH)+' L', `simples ${num(r.arrS)} L · dupla ${num(r.arrD)} L · hidráulica ${num(r.arrH)} L`)}${kpi('Motociclos', num(r.moto)+' L')}${kpi('Caminhões', num(r.cam)+' L')}
     ${kpi('Nylon / Faca', `${num(r.nylon)} / ${num(r.faca,0)}`, r.ny.length+' lançamentos')}${kpi('Ordens de serviço', r.os.length, hhmm(r.horas)+' trabalhadas')}
     ${kpi('Homem-hora', num(r.hh), r.lit&&r.hh?num(r.lit/r.hh)+' L por homem-hora':'')}</div>
+    ${graficosOperacao(r, cid)}
     <div class="grid2"><div class="card"><h2>Combustível por equipamento</h2><div class="tabela-wrap">${tabelaBarras(['Equipamento','Litros'], agrupa(r.ab,a=>nomeEquip(a.equipId),a=>a.litros), v=>num(v)+' L')}</div></div>
     <div class="card"><h2>Combustível por colaborador</h2><div class="tabela-wrap">${tabelaBarras(['Colaborador','Litros'], agrupa(r.ab,a=>nomeColab(a.colabId),a=>a.litros), v=>num(v)+' L')}</div></div></div>` + tabColab;
+}
+/* ===== Gráficos gerenciais da Operação (respeitam o mês e o colaborador escolhidos) ===== */
+const COR_G = { comb:'#1f6f4a', custo:'#2563eb', nylon:'#7c3aed', faca:'#d97706', os:'#0e7490', meta:'#9aa5a0' };
+function svgBarras(pts, o={}){
+  // pts: [{r: rótulo, v: valor, v2?: valor da 2ª série, t?: dica}]
+  const W = 620, H = (o.H || 220) + (o.sub?14:0), pl = 52, pr = 12, pt = 16, pb = o.sub ? 44 : 30, iw = W-pl-pr, ih = H-pt-pb, n = Math.max(1, pts.length);
+  const max = Math.max(1e-9, ...pts.map(p=>Math.max(+p.v||0, +p.v2||0))) * 1.08, y = v => pt + ih - (v/max)*ih, bw = iw/n, duas = pts.some(p=>p.v2!==undefined);
+  const grade = [0,.25,.5,.75,1].map(f=>`<line x1="${pl}" x2="${W-pr}" y1="${y(max*f)}" y2="${y(max*f)}" stroke="#e6e9e7"/><text x="${pl-6}" y="${y(max*f)+4}" text-anchor="end" font-size="10.5" fill="#6b7570">${(o.fmtEixo||(v=>num(v,0)))(max*f)}</text>`).join('');
+  const passo = Math.max(1, Math.ceil(n/(o.maxRot||12)));
+  const barras = pts.map((p,i)=>{ const x = pl + i*bw, w = Math.max(2, bw*(duas?.38:.7)), x1 = x + (duas ? bw*.1 : bw*.15);
+    const b1 = `<rect x="${x1}" y="${y(+p.v||0)}" width="${w}" height="${ih-(y(+p.v||0)-pt)}" rx="2" fill="${o.cor||COR_G.comb}"><title>${esc(p.t||p.r)}: ${(o.fmt||num)(+p.v||0)}</title></rect>`;
+    const b2 = duas ? `<rect x="${x1+w+2}" y="${y(+p.v2||0)}" width="${w}" height="${ih-(y(+p.v2||0)-pt)}" rx="2" fill="${o.cor2||COR_G.faca}"><title>${esc(p.t||p.r)}: ${(o.fmt2||num)(+p.v2||0)}</title></rect>` : '';
+    const rot = i%passo===0 ? `<text x="${x+bw/2}" y="${H-(o.sub?24:10)}" text-anchor="middle" font-size="11" fill="#6b7570">${esc(p.r)}</text>` + (o.sub?`<text x="${x+bw/2}" y="${H-8}" text-anchor="middle" font-size="10.5" font-weight="600" fill="${o.corSub||'#1d2420'}">${o.sub(p)}</text>`:'') : '';
+    const val = o.valores && (+p.v) ? `<text x="${x1+w/2}" y="${y(+p.v)-4}" text-anchor="middle" font-size="10" fill="#1d2420">${(o.fmtVal||(v=>num(v,0)))(+p.v)}</text>` : '';
+    return b1+b2+rot+val; }).join('');
+  const media = o.media ? (()=>{ const vs = pts.map(p=>+p.v||0).filter(v=>v>0), m = vs.length ? soma(vs,v=>v)/vs.length : 0; return m ? `<line x1="${pl}" x2="${W-pr}" y1="${y(m)}" y2="${y(m)}" stroke="${COR_G.meta}" stroke-dasharray="5 4"/><text x="${W-pr}" y="${y(m)-4}" text-anchor="end" font-size="10.5" fill="#5f6b65">média ${(o.fmt||num)(m)}</text>` : ''; })() : '';
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${grade}${barras}${media}</svg>`;
+}
+const legendaG = itens => `<div class="faixas" style="margin-top:4px">${itens.map(([t,c])=>`<div><i style="background:${c}"></i>${t}</div>`).join('')}</div>`;
+const mesesAtras = (ref, n) => { const [a,m] = ref.split('-').map(Number); return Array.from({length:n},(_,i)=>{ const d = new Date(a, m-1-(n-1-i), 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }); };
+function progLado(k){
+  const cs = ciclosLA(k), h = hoje(), c = cs.find(x=>{ const [i,f]=x.split('|'); return i<=h && h<=f; }) || cs[0]; if(!c) return '';
+  const l = L(k).filter(r=>cicloLA(r)===c), prev = soma(l,r=>r.metragem)||0; if(!prev) return '';
+  const e = soma(l.filter(r=>r.status==='Executada'),r=>+r.metragemFinal||+r.metragem), a = soma(l.filter(r=>r.status==='Em andamento'),r=>r.metragem);
+  const [ini, fim] = c.split('|'), dias = Math.round((new Date(fim)-new Date(ini))/864e5)+1, dec = Math.min(dias, Math.max(0, Math.round((new Date(h)-new Date(ini))/864e5)+1));
+  return `<div style="margin:8px 0 12px"><div style="display:flex;justify-content:space-between;font-size:13px"><b>${LADOS[k]}</b><span class="s">${dataBR(ini).slice(0,5)} a ${dataBR(fim).slice(0,5)} · ${Math.round(dec/dias*100)}% do prazo</span></div>
+    <div class="dispbar" style="margin:4px 0 2px;position:relative"><i style="width:${e/prev*100}%;background:${COR_LA['Executada']}">${e/prev>=.07?Math.round(e/prev*100)+'%':''}</i><i style="width:${a/prev*100}%;background:${COR_LA['Em andamento']}">${a/prev>=.07?Math.round(a/prev*100)+'%':''}</i><i style="width:${Math.max(0,100-(e+a)/prev*100)}%;background:${COR_LA['Não executada']}"></i>
+    <span title="ritmo esperado hoje" style="position:absolute;top:-3px;bottom:-3px;left:${dec/dias*100}%;border-left:2px dashed #1d2420"></span></div>
+    <div class="s">${num(e,0)} m² executados de ${num(prev,0)} m² · ${num(a,0)} m² em andamento</div></div>`;
+}
+function graficosOperacao(r, cid){
+  const mes = est.mes || hoje().slice(0,7), [ano, mm] = mes.split('-').map(Number), nd = new Date(ano, mm, 0).getDate();
+  const doColab = (lista, k='colabId') => cid ? lista.filter(x=>k==='colabs' ? (x.colabs||[]).includes(cid) : x[k]===cid) : lista;
+  const abT = doColab(L('abastecimentos')), nyT = doColab(L('nylon')), osT = doColab(L('ordens'),'colabs');
+  // 1) consumo diário no mês
+  const dias = Array.from({length:nd},(_,i)=>`${mes}-${String(i+1).padStart(2,'0')}`);
+  const diario = dias.map(d=>({ r:d.slice(8), t:dataBR(d), v:soma(abT.filter(a=>a.data===d),a=>a.litros) }));
+  // 2) evolução dos últimos 6 meses
+  const ms = mesesAtras(mes, 6);
+  const mensal = ms.map(m=>{ const ab = abT.filter(a=>String(a.data).slice(0,7)===m); return { r:mesBR(m).split(' de ')[0].slice(0,3), t:mesBR(m), v:soma(ab,a=>a.litros), c:soma(ab,a=>(+a.litros||0)*(+a.valorLitro||0)) }; });
+  const nyM = ms.map(m=>{ const n = nyT.filter(x=>String(x.data).slice(0,7)===m); return { r:mesBR(m).split(' de ')[0].slice(0,3), t:mesBR(m), v:soma(n,x=>x.nylon), v2:soma(n,x=>x.faca) }; });
+  const osM = ms.map(m=>{ const o = osT.filter(x=>String(x.inicio).slice(0,7)===m); return { r:mesBR(m).split(' de ')[0].slice(0,3), t:mesBR(m), v:soma(o,x=>horasEntre(x.inicio,x.fim)*(cid?1:(+x.qtdColab||0))), v2:o.length }; });
+  // 3) combustível por tipo de equipamento e OS por tipo de serviço (período escolhido)
+  const porTipo = agrupa(r.ab, a=>tipoEquip(equip(a.equipId))||'Sem tipo', a=>a.litros);
+  const osTipo = agrupa(r.os, o=>o.tipo||'Outro', o=>horasEntre(o.inicio,o.fim)*(cid?1:(+o.qtdColab||0)));
+  // 4) indicadores gerenciais
+  const comPreco = r.ab.filter(a=>+a.valorLitro), precoMed = soma(comPreco,a=>a.litros) ? soma(comPreco,a=>(+a.litros)*(+a.valorLitro))/soma(comPreco,a=>a.litros) : 0;
+  const diasCom = new Set(r.ab.map(a=>a.data)).size, roc = r.ab.filter(ehCostal), nRoc = new Set(roc.map(a=>a.equipId)).size;
+  const mAnt = mesesAtras(mes, 2)[0], litAnt = soma(abT.filter(a=>String(a.data).slice(0,7)===mAnt),a=>a.litros), varPct = est.mes && litAnt ? (r.lit-litAnt)/litAnt*100 : null;
+  const sal = (()=>{ const mv = movEstoque().filter(m=>m.comb==='Gasolina'); return mv.length ? soma(mv,m=>m.q) : null; })();
+  const ind = `<div class="kpis">${kpi('Custo médio do litro', precoMed?brl(precoMed):'—', comPreco.length+' abastecimento(s) com preço')}${kpi('Média por dia com abastecimento', diasCom?num(r.lit/diasCom)+' L':'—', diasCom+' dia(s) com lançamento')}
+    ${kpi('Variação vs mês anterior', varPct===null?'—':`<span style="color:${varPct>0?'#b42318':'#1f6f4a'}">${varPct>0?'▲':'▼'} ${num(Math.abs(varPct),1)}%</span>`, varPct===null?'escolha um mês':`${num(litAnt)} L em ${mesBR(mAnt)}`)}
+    ${kpi('Média por roçadeira costal', nRoc?num(soma(roc,a=>a.litros)/nRoc)+' L':'—', nRoc+' roçadeira(s) abastecida(s)')}${kpi('Nylon por OS', r.os.length?num(r.nylon/r.os.length):'—', r.os.length+' OS no período')}
+    ${sal===null?'':kpi('Saldo de gasolina (estoque)', `<span style="color:${sal<0?'#b42318':'inherit'}">${num(sal)} L</span>`, 'galões das roçadeiras')}</div>`;
+  const lados = progLado('ladoar') + progLado('ladoterra');
+  const periodo = est.mes ? mesBR(est.mes) : 'todos os meses';
+  return `<div class="card"><h2>Indicadores gerenciais${cid?' – '+esc(nomeColab(cid)):''}</h2>${ind}</div>
+    <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(480px,1fr))">
+      <div class="card"><h2>Consumo diário de combustível – ${mesBR(mes)}</h2>${svgBarras(diario,{media:1, fmt:v=>num(v)+' L', maxRot:16})}<div class="s">Litros abastecidos por dia. A linha tracejada é a média dos dias com abastecimento.</div></div>
+      <div class="card"><h2>Evolução mensal do combustível</h2>${svgBarras(mensal,{valores:1, fmt:v=>num(v)+' L', sub:m=>m.c?'R$ '+num(m.c/1000,1)+' mil':'—', corSub:COR_G.custo})}
+        <div class="s">Barras: litros no mês. Embaixo, em azul: custo do combustível (quando o valor por litro foi informado).</div></div>
+      <div class="card"><h2>Combustível por tipo de equipamento <span class="s">· ${periodo}</span></h2><div class="tabela-wrap">${tabelaBarras(['Tipo','Litros','%'], porTipo.map(([t,v])=>[t,v,r.lit?num(v/r.lit*100,1)+'%':'']), v=>num(v)+' L')}</div></div>
+      <div class="card"><h2>Consumo de nylon e faca – últimos 6 meses</h2>${svgBarras(nyM.map(({v2,...m})=>({...m,f:v2})),{cor:COR_G.nylon, valores:1, fmt:v=>num(v), sub:m=>num(m.f,0)+' faca'+(m.f==1?'':'s'), corSub:COR_G.faca})}${legendaG([['Nylon (quantidade lançada)',COR_G.nylon],['Facas (embaixo)',COR_G.faca]])}</div>
+      <div class="card"><h2>Ordens de serviço – últimos 6 meses</h2>${svgBarras(osM.map(({v2,...m})=>({...m,q:v2})),{cor:COR_G.os, valores:1, fmt:v=>hhmm(v), fmtVal:v=>num(v,0), sub:m=>num(m.q,0)+' OS', fmtEixo:v=>num(v,0)})}${legendaG([[cid?'Horas trabalhadas':'Homem-hora',COR_G.os],['Quantidade de OS (embaixo)','#1d2420']])}</div>
+      <div class="card"><h2>${cid?'Horas':'Homem-hora'} por tipo de serviço <span class="s">· ${periodo}</span></h2><div class="tabela-wrap">${tabelaBarras(['Serviço',cid?'Horas':'Homem-hora'], osTipo, v=>hhmm(v))}</div></div>
+    </div>
+    ${lados?`<div class="card"><h2>Andamento da roçada – ciclo atual</h2>${lados}${legendaG([['Executada',COR_LA['Executada']],['Em andamento',COR_LA['Em andamento']],['Não executada',COR_LA['Não executada']],['Linha tracejada: ritmo esperado hoje','#1d2420']])}</div>`:''}`;
 }
 function prepPainelComb(){
   $('#pcColab')?.addEventListener('change', e=>{ est.painelColab = e.target.value; renderTudo(); });
