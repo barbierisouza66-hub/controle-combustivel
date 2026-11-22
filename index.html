@@ -248,7 +248,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '6.1';
+const VERSAO = '6.2';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -305,6 +305,7 @@ function tabelaBarras(titulos, pares, fmt=v=>num(v)){
 function agrupa(lista, chave, valor){ const g={}; lista.forEach(r=>{ const k=chave(r)||'—'; g[k]=(g[k]||0)+(+valor(r)||0); }); return Object.entries(g).sort((a,b)=>b[1]-a[1]); }
 
 /* ===================== LISTAS DE OPÇÕES ===================== */
+const DESTINOS_POSTO = ['Estoque (galões das roçadeiras)','Direto no veículo'];
 const OPT_COMB = ['Gasolina','Mistura 2T','Diesel S10','Diesel S500','Etanol','Elétrico','Não se aplica'];
 const STATUS_LA = ['Não executada','Em andamento','Executada'];
 const CLS_LA = { 'Executada':'', 'Em andamento':'w', 'Não executada':'d' };
@@ -454,15 +455,17 @@ const ENT = {
       col('Total R$',r=>(+r.litros*+r.valorLitro)?brl(+r.litros*+r.valorLitro):'—',{n:1,tot:l=>brl(soma(l,r=>(+r.litros||0)*(+r.valorLitro||0)))}),
       col('Horímetro',r=>r.horimetro?num(r.horimetro,1):'—',{n:1}),col('Local',r=>r.local)] },
 
-  abastposto: { nome:'abastecimento no posto', data:'data', campos:[
+  abastposto: { nome:'abastecimento no posto', data:'data', manter:['cupomArq'], campos:[
       {k:'data',l:'Data',t:'date',req:1},{k:'turno',l:'Turno',t:'select',op:['Diurno','Noturno'],req:1},{k:'posto',l:'Posto',req:1},
-      {k:'equipId',l:'Veículo / equipamento',t:'ref',ent:'equipamentos',filtro:ativoEquip,req:1},{k:'colabId',l:'Motorista / operador',t:'ref',ent:'colaboradores',filtro:ativoColab,req:1},
-      {k:'combustivel',l:'Combustível',t:'select',op:OPT_COMB},{k:'litros',l:'Litros',t:'number',req:1},{k:'valorLitro',l:'Valor por litro (R$)',t:'moeda'},
-      {k:'km',l:'Km / horímetro',t:'number',step:'0.1'},{k:'nota',l:'Nº da nota / cupom'},{k:'obs',l:'Observação',t:'textarea'}],
-    cols:[col('Data',r=>dataBR(r.data)),col('Turno',r=>r.turno||'—'),col('Posto',r=>r.posto),col('Veículo',r=>nomeEquip(r.equipId)),col('Motorista',r=>nomeColab(r.colabId)),col('Combustível',r=>r.combustivel),
+      {k:'destino',l:'Destino do combustível',t:'select',op:DESTINOS_POSTO},
+      {k:'equipId',l:'Veículo / equipamento',t:'ref',ent:'equipamentos',filtro:ativoEquip,se:o=>o.destino===DESTINOS_POSTO[1]},{k:'colabId',l:'Quem abasteceu',t:'ref',ent:'colaboradores',filtro:ativoColab},
+      {k:'combustivel',l:'Combustível',t:'select',op:OPT_COMB},{k:'litros',l:'Litros',t:'number',step:'0.01',req:1},{k:'valorLitro',l:'Valor por litro (R$)',t:'moeda'},
+      {k:'nota',l:'Nº do cupom fiscal'},{k:'km',l:'Km / horímetro do veículo',t:'number',step:'0.1',se:o=>o.destino===DESTINOS_POSTO[1]},{k:'obs',l:'Observação',t:'textarea'}],
+    validar:o=>o.destino===DESTINOS_POSTO[1] && !o.equipId ? 'Informe o veículo abastecido.' : '',
+    cols:[col('Data',r=>dataBR(r.data)),col('Turno',r=>r.turno||'—'),col('Posto',r=>r.posto),col('Destino',r=>(r.destino||DESTINOS_POSTO[0])===DESTINOS_POSTO[0]?'Estoque (galões)':'Veículo: '+nomeEquip(r.equipId)),col('Quem abasteceu',r=>r.colabId?nomeColab(r.colabId):''),col('Combustível',r=>r.combustivel),
       col('Litros',r=>num(r.litros),{n:1,tot:l=>num(soma(l,r=>r.litros))}),col('R$/L',r=>r.valorLitro?brl(r.valorLitro):'—',{n:1}),
       col('Total R$',r=>(+r.litros*+r.valorLitro)?brl(+r.litros*+r.valorLitro):'—',{n:1,tot:l=>brl(soma(l,r=>(+r.litros||0)*(+r.valorLitro||0)))}),
-      col('Km',r=>r.km?num(r.km,1):'—',{n:1}),col('Nota',r=>r.nota)] },
+      col('Nº cupom',r=>r.nota),col('Cupom fiscal',r=>celCupom(r),{html:1})] },
 
   nylon: { nome:'lançamento de nylon e faca', data:'data', campos:[
       {k:'data',l:'Data',t:'date',req:1},{k:'equipId',l:'Equipamento',t:'ref',ent:'equipamentos',filtro:ativoEquip,req:1},{k:'colabId',l:'Operador',t:'ref',ent:'colaboradores',filtro:ativoColab,req:1},
@@ -538,7 +541,7 @@ const COLECOES_CONTRATO = ['colaboradores','equipamentos','custos','lli','ladoar
 /* ===================== MÓDULOS E ABAS ===================== */
 const MODULOS = [
   { id:'geral', nome:'Visão geral', abas:[ {nome:'Resumo do mês', painel:()=>painelGeral()} ] },
-  { id:'combustivel', nome:'Operação', abas:[ {nome:'Painel', painel:()=>painelCombustivel()}, {nome:'Abastecimento de equipamento', ent:'abastecimentos'}, {nome:'Abastecimento posto', ent:'abastposto'}, {nome:'Nylon e Faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'Lado AR', painel:()=>telaLadoAr('ladoar'), depois:()=>prepLadoAr('ladoar')}, {nome:'Lado Terra', painel:()=>telaLadoAr('ladoterra'), depois:()=>prepLadoAr('ladoterra')} ] },   // abas de RH retiradas do Combustível (o RH fica no módulo RH)
+  { id:'combustivel', nome:'Operação', abas:[ {nome:'Painel', painel:()=>painelCombustivel()}, {nome:'Abastecimento de equipamento', painel:()=>cardSaldoComb()+telaEntidade('abastecimentos'), depois:()=>prepararForm('abastecimentos')}, {nome:'Abastecimento posto', painel:()=>cardSaldoComb(true)+telaEntidade('abastposto'), depois:()=>prepAbastPosto()}, {nome:'Nylon e Faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'Lado AR', painel:()=>telaLadoAr('ladoar'), depois:()=>prepLadoAr('ladoar')}, {nome:'Lado Terra', painel:()=>telaLadoAr('ladoterra'), depois:()=>prepLadoAr('ladoterra')} ] },   // abas de RH retiradas do Combustível (o RH fica no módulo RH)
   { id:'rh', nome:'RH', abas:[ {nome:'Painel', painel:()=>painelRH()}, {nome:'Ocorrências – calendário do mês', painel:()=>telaCalendarioRH(), depois:()=>prepCalendarioRH()}, {nome:'Quadro previsto e vagas', painel:()=>telaQuadroVagas(), depois:()=>{ prepararForm('quadro'); prepararForm('vagas'); }} ] },
   { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', painel:()=>graficoDispEquip() + telaEntidade('manutencoes'), depois:()=>prepararForm('manutencoes')}, {nome:'Documentos – CRLV e opacidade', painel:()=>telaDocsEquip(), depois:()=>prepDocsEquip()}, {nome:'Custos por equipamento', painel:()=>telaCustosEquip(), depois:()=>prepararForm('custos')}, {nome:'LLI', painel:()=>telaLLI(), depois:()=>prepLLI()} ] },
   { id:'cadastros', nome:'Cadastros', abas:[ {nome:'Colaboradores', ent:'colaboradores'}, {nome:'Equipamentos', ent:'equipamentos'} ] },
@@ -887,6 +890,55 @@ function prepDocsEquip(){
     const w = window.open('', '_blank');
     const { data, error } = await sb.storage.from(BUCKET_DOCS).createSignedUrl(d.path, 600);
     if(error){ w?.close(); alert('Não foi possível abrir o arquivo: '+error.message); return; }
+    if(w) w.location = data.signedUrl; else location.href = data.signedUrl;
+  });
+}
+/* ===== Estoque de combustível das roçadeiras costais: entra pelo Abastecimento posto (cupom), sai pelo Abastecimento de equipamento ===== */
+const grupoComb = c => !c || c==='Mistura 2T' ? 'Gasolina' : c;   // a mistura 2T é feita com a gasolina comprada no posto
+const ehEstoque = r => (r.destino||DESTINOS_POSTO[0]) === DESTINOS_POSTO[0];
+const ehCostal = a => tipoEquip(equip(a.equipId)) === 'Roçadeira';
+function movEstoque(){
+  const ent = L('abastposto').filter(ehEstoque).map(r=>({ data:r.data, comb:grupoComb(r.combustivel), q:+r.litros||0, txt:`Compra · ${r.posto||'posto'}${r.nota?' · cupom '+r.nota:''}` }));
+  const sai = L('abastecimentos').filter(ehCostal).map(a=>({ data:a.data, comb:grupoComb(a.combustivel), q:-(+a.litros||0), txt:`${nomeEquip(a.equipId)} · ${nomeColab(a.colabId)}` }));
+  return ent.concat(sai).sort((a,b)=>String(a.data).localeCompare(String(b.data)) || b.q-a.q);
+}
+function cardSaldoComb(extrato){
+  const mov = movEstoque(); if(!mov.length) return `<div class="card"><h2>Saldo de combustível – roçadeiras costais</h2><p class="info" style="margin:0">Lance a compra no <b>Abastecimento posto</b> (destino "Estoque") com o cupom fiscal. Cada abastecimento de roçadeira lançado em <b>Abastecimento de equipamento</b> baixa o saldo.</p></div>`;
+  const combs = [...new Set(mov.map(m=>m.comb))];
+  const kp = combs.map(c=>{ const m = mov.filter(x=>x.comb===c), e = soma(m.filter(x=>x.q>0),x=>x.q), sd = -soma(m.filter(x=>x.q<0),x=>x.q), sal = e - sd;
+    return kpi(`Saldo de ${c.toLowerCase()}${c==='Gasolina'?' / mistura':''}`, `<span style="color:${sal<0?'var(--danger,#b42318)':'inherit'}">${num(sal)} L</span>`, `comprado ${num(e)} L · consumido ${num(sd)} L`); }).join('');
+  let ext = '';
+  if(extrato){ const saldo = {}; const linhas = mov.map(m=>{ saldo[m.comb] = (saldo[m.comb]||0) + m.q; return `<tr><td>${dataBR(m.data)}</td><td>${esc(m.comb)}</td><td>${esc(m.txt)}</td><td class="num" style="color:${m.q<0?'#b42318':'#1f6f4a'}">${m.q>0?'+':''}${num(m.q)}</td><td class="num"><b>${num(saldo[m.comb])}</b></td></tr>`; }).reverse().slice(0,60).join('');
+    ext = `<details style="margin-top:8px"><summary>Ver extrato do estoque (entradas e saídas)</summary><div class="tabela-wrap"><table><thead><tr><th>Data</th><th>Combustível</th><th>Movimento</th><th class="num">Litros</th><th class="num">Saldo</th></tr></thead><tbody>${linhas}</tbody></table></div></details>`; }
+  return `<div class="card"><h2>Saldo de combustível – roçadeiras costais</h2><div class="kpis">${kp}</div>
+    <p class="info" style="margin:6px 0 0">Entradas: compras no posto com destino "Estoque". Saídas: abastecimentos de equipamentos do tipo Roçadeira. Saldo acumulado (todos os meses).</p>${ext}</div>`;
+}
+function celCupom(r){
+  const a = r.cupomArq;
+  return `<span data-cupom="${r.id}">${a?.path?`<a href="#" data-vercupom="${r.id}">📄 ver</a> · `:''}<label class="peq btnarq">${a?.path?'trocar':'📎 anexar'}<input type="file" accept="application/pdf,image/*" capture="environment" data-cupomarq hidden></label></span>`;
+}
+function prepAbastPosto(){
+  prepararForm('abastposto');
+  const tb = document.querySelector('table[data-tabent="abastposto"]'); if(!tb) return;
+  tb.addEventListener('change', async ev=>{
+    if(ev.target.dataset.cupomarq === undefined) return;
+    const id = ev.target.closest('[data-cupom]').dataset.cupom, r = L('abastposto').find(x=>x.id===id), f = ev.target.files[0]; if(!r || !f) return;
+    if(f.size > 10*1024*1024){ alert('Arquivo maior que 10 MB. Envie um PDF ou foto menor.'); ev.target.value=''; return; }
+    const ext = (f.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,''), path = `${contrato.id}/cupons/${id}-${Date.now()}.${ext}`;
+    carregando(true);
+    const { error } = await sb.storage.from(BUCKET_DOCS).upload(path, f, { upsert:false, contentType: f.type || undefined });
+    if(error){ carregando(false); alert('Não foi possível enviar o cupom: '+error.message); return; }
+    const ant = r.cupomArq?.path;
+    try{ await gravar('abastposto', { ...r, cupomArq:{ path, nome:f.name, enviado:hoje() } }); if(ant) sb.storage.from(BUCKET_DOCS).remove([ant]); toast('Cupom fiscal anexado.'); }
+    catch(e){ alert('Não foi possível salvar: '+(e.message||e)); }
+    carregando(false); renderTudo();
+  });
+  tb.addEventListener('click', async ev=>{
+    const a = ev.target.closest('[data-vercupom]'); if(!a) return; ev.preventDefault();
+    const d = L('abastposto').find(x=>x.id===a.dataset.vercupom)?.cupomArq; if(!d?.path) return;
+    const w = window.open('', '_blank');
+    const { data, error } = await sb.storage.from(BUCKET_DOCS).createSignedUrl(d.path, 600);
+    if(error){ w?.close(); alert('Não foi possível abrir o cupom: '+error.message); return; }
     if(w) w.location = data.signedUrl; else location.href = data.signedUrl;
   });
 }
