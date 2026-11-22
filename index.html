@@ -248,7 +248,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '7.0';
+const VERSAO = '7.1';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -471,15 +471,15 @@ const ENT = {
       col('Total R$',r=>(+r.litros*+r.valorLitro)?brl(+r.litros*+r.valorLitro):'—',{n:1,tot:l=>brl(soma(l,r=>(+r.litros||0)*(+r.valorLitro||0)))}),
       col('Nº cupom',r=>r.nota),col('Cupom fiscal',r=>celCupom(r),{html:1})] },
 
-  receitas: { nome:'lançamento de receita', data:'competencia', ordem:(a,b)=>String(b.competencia).localeCompare(String(a.competencia)), campos:[
+  receitas: { nome:'lançamento de receita', data:'competencia', manter:['nfArq','bmArq'], ordem:(a,b)=>String(b.competencia).localeCompare(String(a.competencia)), campos:[
       {k:'competencia',l:'Mês de competência',t:'month',req:1},{k:'tipo',l:'Tipo',t:'select',op:TIPOS_REC},{k:'descricao',l:'Descrição / medição'},
-      {k:'valor',l:'Valor (R$)',t:'moeda',req:1},{k:'status',l:'Situação',t:'select',op:STATUS_REC},{k:'nf',l:'Nº da nota fiscal'},
+      {k:'valor',l:'Valor (R$)',t:'moeda',req:1},{k:'status',l:'Situação',t:'select',op:STATUS_REC},{k:'bm',l:'Nº do BM (boletim de medição)'},{k:'nf',l:'Nº da nota fiscal'},
       {k:'emissao',l:'Data de emissão da NF',t:'date',semDef:1},{k:'vencimento',l:'Vencimento',t:'date',semDef:1},{k:'recebimento',l:'Data do recebimento',t:'date',semDef:1,se:o=>o.status==='Recebida'},
       {k:'obs',l:'Observação',t:'textarea'}],
     antesSalvar:o=>{ if(o.status==='Recebida' && !o.recebimento) o.recebimento = hoje(); return o; },
     cols:[col('Competência',r=>mesBR(r.competencia)),col('Tipo',r=>r.tipo),col('Descrição',r=>r.descricao),
       col('Valor',r=>`<span style="color:${valRec(r)<0?'#b42318':'inherit'}">${brl(valRec(r))}</span>`,{n:1,html:1,tot:l=>brl(soma(l,valRec))}),
-      col('NF',r=>r.nf),col('Emissão',r=>dataBR(r.emissao)),col('Vencimento',r=>dataBR(r.vencimento)),
+      col('BM',r=>r.bm),col('BM anexado',r=>celAnexoRec(r,'bmArq'),{html:1}),col('NF',r=>r.nf),col('NF anexada',r=>celAnexoRec(r,'nfArq'),{html:1}),col('Emissão',r=>dataBR(r.emissao)),col('Vencimento',r=>dataBR(r.vencimento)),
       col('Situação',r=>valRec(r)<0?tag('Desconto','n'):tag(r.status==='Faturada'&&vencidaRec(r)?'Vencida':r.status||'A faturar', r.status==='Recebida'?'':r.status==='Faturada'?(vencidaRec(r)?'d':'w'):'n'),{html:1}),col('Recebida em',r=>dataBR(r.recebimento))] },
 
   nylon: { nome:'consumo de nylon e faca', data:'data', campos:[
@@ -559,7 +559,7 @@ const MODULOS = [
   { id:'combustivel', nome:'Operação', abas:[ {nome:'Painel', painel:()=>painelCombustivel(), depois:()=>prepPainelComb()}, {nome:'Abastecimento de equipamento', painel:()=>cardSaldoComb()+telaEntidade('abastecimentos'), depois:()=>prepararForm('abastecimentos')}, {nome:'Abastecimento posto', painel:()=>cardSaldoComb(true)+telaEntidade('abastposto'), depois:()=>prepAbastPosto()}, {nome:'Consumo de nylon e faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'Lado AR', painel:()=>telaLadoAr('ladoar'), depois:()=>prepLadoAr('ladoar')}, {nome:'Lado Terra', painel:()=>telaLadoAr('ladoterra'), depois:()=>prepLadoAr('ladoterra')} ] },   // abas de RH retiradas do Combustível (o RH fica no módulo RH)
   { id:'rh', nome:'RH', abas:[ {nome:'Painel', painel:()=>painelRH()}, {nome:'Ocorrências – calendário do mês', painel:()=>telaCalendarioRH(), depois:()=>prepCalendarioRH()}, {nome:'Quadro previsto e vagas', painel:()=>telaQuadroVagas(), depois:()=>{ prepararForm('quadro'); prepararForm('vagas'); }} ] },
   { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', painel:()=>graficoDispEquip() + telaEntidade('manutencoes'), depois:()=>prepararForm('manutencoes')}, {nome:'Documentos – CRLV e opacidade', painel:()=>telaDocsEquip(), depois:()=>prepDocsEquip()}, {nome:'Custos por equipamento', painel:()=>telaCustosEquip(), depois:()=>prepararForm('custos')}, {nome:'LLI', painel:()=>telaLLI(), depois:()=>prepLLI()} ] },
-  { id:'receita', nome:'Receita / Contrato', abas:[ {nome:'Painel', painel:()=>painelReceita(), depois:()=>prepReceita()}, {nome:'Faturamento e recebimentos', ent:'receitas'}, {nome:'Documentos do contrato', painel:()=>telaDocsContrato(), depois:()=>prepDocsContrato()} ] },
+  { id:'receita', nome:'Receita / Contrato', abas:[ {nome:'Painel', painel:()=>painelReceita(), depois:()=>prepReceita()}, {nome:'Faturamento e recebimentos', painel:()=>telaEntidade('receitas'), depois:()=>prepReceitas()}, {nome:'Documentos do contrato', painel:()=>telaDocsContrato(), depois:()=>prepDocsContrato()} ] },
   { id:'cadastros', nome:'Cadastros', abas:[ {nome:'Colaboradores', ent:'colaboradores'}, {nome:'Equipamentos', ent:'equipamentos'} ] },
 ];
 const modulosDoContrato = () => { const m = contrato?.modulos?.length ? contrato.modulos : MODULOS_OPCIONAIS.map(x=>x[0]); return MODULOS.filter(x=>x.id==='geral'||x.id==='cadastros'||x.id==='receita'||m.includes(x.id)); };
@@ -953,6 +953,37 @@ function prepDocsContrato(){
     try{ await salvarContrato({ docs:(contrato.docs||[]).filter(x=>x.path!==d.path) }); sb.storage.from(BUCKET_DOCS).remove([d.path]); toast('Documento excluído.'); renderTudo(); }
     catch(e){ alert('Não foi possível excluir: '+(e.message||e)); }
   }));
+}
+// Anexos de cada lançamento de receita: NF faturada e BM (boletim de medição)
+const ANEXOS_REC = { nfArq:'NF', bmArq:'BM' };
+function celAnexoRec(r, campo){
+  const a = r[campo];
+  return `<span data-anexorec="${r.id}|${campo}" style="white-space:nowrap">${a?.path?`<a href="#" data-veranexo="${r.id}|${campo}" title="${esc(a.nome)}">📄 ver</a> · `:''}<label class="peq btnarq">${a?.path?'trocar':'📎 anexar'}<input type="file" accept="application/pdf,image/*,.xls,.xlsx,.doc,.docx" data-anexoarq hidden></label></span>`;
+}
+function prepReceitas(){
+  prepararForm('receitas');
+  const tb = document.querySelector('table[data-tabent="receitas"]'); if(!tb) return;
+  tb.addEventListener('change', async ev=>{
+    if(ev.target.dataset.anexoarq === undefined) return;
+    const [id, campo] = ev.target.closest('[data-anexorec]').dataset.anexorec.split('|'), r = L('receitas').find(x=>x.id===id), f = ev.target.files[0]; if(!r || !f) return;
+    if(f.size > 30*1024*1024){ alert('Arquivo maior que 30 MB.'); ev.target.value=''; return; }
+    const ext = (f.name.split('.').pop()||'pdf').toLowerCase().replace(/[^a-z0-9]/g,''), path = `${contrato.id}/receitas/${id}-${campo}-${Date.now()}.${ext}`;
+    carregando(true);
+    const { error } = await sb.storage.from(BUCKET_DOCS).upload(path, f, { upsert:false, contentType: f.type || undefined });
+    if(error){ carregando(false); alert('Não foi possível enviar o arquivo: '+error.message); return; }
+    const ant = r[campo]?.path;
+    try{ await gravar('receitas', { ...r, [campo]:{ path, nome:f.name, enviado:hoje() } }); if(ant) sb.storage.from(BUCKET_DOCS).remove([ant]); toast(`${ANEXOS_REC[campo]} anexada.`); }
+    catch(e){ sb.storage.from(BUCKET_DOCS).remove([path]); alert('Não foi possível salvar: '+(e.message||e)); }
+    carregando(false); renderTudo();
+  });
+  tb.addEventListener('click', async ev=>{
+    const a = ev.target.closest('[data-veranexo]'); if(!a) return; ev.preventDefault();
+    const [id, campo] = a.dataset.veranexo.split('|'), d = L('receitas').find(x=>x.id===id)?.[campo]; if(!d?.path) return;
+    const w = window.open('', '_blank');
+    const { data, error } = await sb.storage.from(BUCKET_DOCS).createSignedUrl(d.path, 600);
+    if(error){ w?.close(); alert('Não foi possível abrir o arquivo: '+error.message); return; }
+    if(w) w.location = data.signedUrl; else location.href = data.signedUrl;
+  });
 }
 function prepReceita(){
   $('#recSalvarVM')?.addEventListener('click', async ()=>{
