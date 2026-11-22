@@ -248,7 +248,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '7.1';
+const VERSAO = '7.2';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -371,7 +371,7 @@ const sitTag = s => tag(s||'—', s==='Operando'||s==='Ativo'||s==='Concluída' 
 const MODULOS_OPCIONAIS = [['combustivel','Operação'],['rh','RH'],['equipamentos','Controle de Equipamentos']];   // Produção de Fardos retirada (os lançamentos antigos continuam guardados no banco)
 
 const ENT = {
-  contratos: { nome:'contrato', titulo:r=>r.nome, manter:['lli','precoLA','precoVias','precoLT','docs'], campos:[
+  contratos: { nome:'contrato', titulo:r=>r.nome, manter:['lli','precoLA','precoVias','precoLT','docs','acessos'], campos:[
       {k:'nome',l:'Nome do contrato',req:1},{k:'cliente',l:'Cliente'},{k:'local',l:'Unidade / Local'},{k:'numero',l:'Nº do contrato'},{k:'valorMensal',l:'Valor mensal do contrato (R$)',t:'moeda'},
       {k:'inicio',l:'Início',t:'date'},{k:'fim',l:'Término',t:'date'},{k:'status',l:'Situação',t:'select',op:['Ativo','Suspenso','Encerrado']},
       {k:'diasUteis',l:'Dias úteis por mês (RH)',t:'number',step:'1',def:'22'},{k:'jornada',l:'Jornada diária em horas (RH)',t:'number',step:'0.01',def:'8'},{k:'horasSemana',l:'Jornada semanal em horas (RH)',t:'number',step:'0.01',def:'44'},{k:'adicionalHE',l:'Adicional de HE dias úteis/sábado (%)',t:'number',step:'1',def:'50'},{k:'adicionalHE100',l:'Adicional de HE domingos e feriados (%)',t:'number',step:'1',def:'100'},{k:'feriadosExtras',l:'Feriados municipais/estaduais (dd/mm, separados por vírgula)'},{k:'folgaSemanal',l:'Folga semanal (dias abonados)',t:'select',op:['Sábado e domingo','Somente domingo']},{k:'diaPonto',l:'Período do ponto começa no dia (ex.: 11 = de 11 a 10 do mês seguinte)',t:'number',step:'1',def:'1'},{k:'regime',l:'Regime tributário da empresa',t:'select',op:['Lucro Real / Presumido','Simples Nacional (Anexos I, II, III e V)','Simples Nacional – Anexo IV']},{k:'ratPct',l:'RAT/SAT (%)',t:'number',step:'0.5',def:'3'},{k:'fap',l:'FAP (0,5 a 2,0)',t:'number',step:'0.0001',def:'1'},{k:'terceirosPct',l:'Terceiros (%)',t:'number',step:'0.1',def:'5.8'},{k:'fgtsPct',l:'FGTS (%)',t:'number',step:'0.1',def:'8'},
@@ -511,7 +511,7 @@ const ENT = {
     validar:o=>o.cicloIni && o.cicloFim && o.cicloFim < o.cicloIni ? 'O fim do ciclo não pode ser antes do início.' : '',
     cols:[col('Área',r=>r.area),col('Localização',r=>r.localizacao),col('Ciclo',r=>`${dataBR(r.cicloIni).slice(0,5)} a ${dataBR(r.cicloFim).slice(0,5)}`),col('Metragem prev. (m²)',r=>num(r.metragem,0),{n:1,tot:l=>num(soma(l,r=>r.metragem),0)}),
       col('Status',r=>tag(r.status||'Não executada', CLS_LA[r.status||'Não executada']),{html:1}),col('Metragem finalizada (m²)',r=>r.metragemFinal?num(r.metragemFinal,0):'',{n:1,tot:l=>num(soma(l,r=>r.metragemFinal),0)}),
-      col('Conclusão',r=>dataBR(r.dataConclusao)),col('Receita (R$)',r=>{ const v = valorAreaLA(r); return v ? (r.status==='Executada' ? `<b style="color:#1f6f4a">${brl(v)}</b>` : `<span class="s">${brl(v)}</span>`) : ''; },{n:1,html:1,tot:l=>brl(soma(l.filter(r=>r.status==='Executada'),r=>valorAreaLA(r)))+' executado'}),col('Atualizar status',r=>`<select class="lastatus" data-lastatus="${r.id}">${STATUS_LA.map(s=>`<option ${s===(r.status||'Não executada')?'selected':''}>${s}</option>`).join('')}</select>`,{html:1}),col('Observação',r=>r.obs)] },
+      col('Conclusão',r=>dataBR(r.dataConclusao)),col('Receita (R$)',r=>{ const v = semReceita() ? 0 : valorAreaLA(r); return v ? (r.status==='Executada' ? `<b style="color:#1f6f4a">${brl(v)}</b>` : `<span class="s">${brl(v)}</span>`) : ''; },{n:1,html:1,tot:l=>semReceita()?'':brl(soma(l.filter(r=>r.status==='Executada'),r=>valorAreaLA(r)))+' executado'}),col('Atualizar status',r=>`<select class="lastatus" data-lastatus="${r.id}">${STATUS_LA.map(s=>`<option ${s===(r.status||'Não executada')?'selected':''}>${s}</option>`).join('')}</select>`,{html:1}),col('Observação',r=>r.obs)] },
 
   custos: { nome:'custo do equipamento', data:'data', campos:[
       {k:'data',l:'Data',t:'date',req:1},{k:'equipId',l:'Equipamento',t:'ref',ent:'equipamentos',filtro:()=>true,req:1},
@@ -560,9 +560,15 @@ const MODULOS = [
   { id:'rh', nome:'RH', abas:[ {nome:'Painel', painel:()=>painelRH()}, {nome:'Ocorrências – calendário do mês', painel:()=>telaCalendarioRH(), depois:()=>prepCalendarioRH()}, {nome:'Quadro previsto e vagas', painel:()=>telaQuadroVagas(), depois:()=>{ prepararForm('quadro'); prepararForm('vagas'); }} ] },
   { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', painel:()=>graficoDispEquip() + telaEntidade('manutencoes'), depois:()=>prepararForm('manutencoes')}, {nome:'Documentos – CRLV e opacidade', painel:()=>telaDocsEquip(), depois:()=>prepDocsEquip()}, {nome:'Custos por equipamento', painel:()=>telaCustosEquip(), depois:()=>prepararForm('custos')}, {nome:'LLI', painel:()=>telaLLI(), depois:()=>prepLLI()} ] },
   { id:'receita', nome:'Receita / Contrato', abas:[ {nome:'Painel', painel:()=>painelReceita(), depois:()=>prepReceita()}, {nome:'Faturamento e recebimentos', painel:()=>telaEntidade('receitas'), depois:()=>prepReceitas()}, {nome:'Documentos do contrato', painel:()=>telaDocsContrato(), depois:()=>prepDocsContrato()} ] },
-  { id:'cadastros', nome:'Cadastros', abas:[ {nome:'Colaboradores', ent:'colaboradores'}, {nome:'Equipamentos', ent:'equipamentos'} ] },
+  { id:'cadastros', nome:'Cadastros', abas:[ {nome:'Colaboradores', ent:'colaboradores'}, {nome:'Equipamentos', ent:'equipamentos'}, {nome:'Acessos de usuários', painel:()=>telaAcessos(), depois:()=>prepAcessos()} ] },
 ];
-const modulosDoContrato = () => { const m = contrato?.modulos?.length ? contrato.modulos : MODULOS_OPCIONAIS.map(x=>x[0]); return MODULOS.filter(x=>x.id==='geral'||x.id==='cadastros'||x.id==='receita'||m.includes(x.id)); };
+/* ===== Acessos de usuários com permissão limitada (ex.: operador que só lança dados da Operação) ===== */
+const usuarioAtual = () => ($('#usuarioEmail')?.textContent || '').trim().toLowerCase();
+const acessoDe = c => (c?.acessos||[]).find(a=>String(a.email||'').trim().toLowerCase()===usuarioAtual());
+const usuarioRestrito = () => contratos.some(c=>acessoDe(c));
+const semReceita = () => { const a = acessoDe(contrato); return !!a && !(a.modulos||[]).includes('receita'); };
+const MODULOS_ACESSO = [['combustivel','Operação'],['rh','RH'],['equipamentos','Controle de Equipamentos'],['receita','Receita / Contrato'],['cadastros','Cadastros'],['geral','Visão geral']];
+const modulosDoContrato = () => { const ac = acessoDe(contrato); if(ac) return MODULOS.filter(x=>(ac.modulos||[]).includes(x.id)); const m = contrato?.modulos?.length ? contrato.modulos : MODULOS_OPCIONAIS.map(x=>x[0]); return MODULOS.filter(x=>x.id==='geral'||x.id==='cadastros'||x.id==='receita'||m.includes(x.id)); };
 
 /* ===================== BANCO DE DADOS ===================== */
 async function buscarTudo(filtro){
@@ -985,6 +991,38 @@ function prepReceitas(){
     if(w) w.location = data.signedUrl; else location.href = data.signedUrl;
   });
 }
+function telaAcessos(){
+  if(acessoDe(contrato)) return '<div class="card"><p class="info" style="margin:0">Somente o administrador gerencia os acessos.</p></div>';
+  const ac = contrato.acessos || [];
+  const chk = (pref, sel) => MODULOS_ACESSO.map(([id,n])=>`<label class="chk"><input type="checkbox" data-${pref}="${id}" ${sel.includes(id)?'checked':''}> ${n}</label>`).join('');
+  const linhas = ac.map((a,i)=>`<tr><td><b>${esc(a.email)}</b>${a.nome?`<div class="s">${esc(a.nome)}</div>`:''}</td><td><div class="opcoes" data-linha="${i}">${chk('modac', a.modulos||[])}</div></td><td><button class="peq" data-salvarac="${i}">Salvar</button> <button class="peq del" data-removerac="${i}">Remover</button></td></tr>`).join('');
+  return `<div class="card"><h2>Acessos de usuários – ${esc(contrato.nome)}</h2>
+    <p class="info">Usuários cadastrados aqui entram no sistema e veem <b>só este contrato e só os módulos marcados</b>. Quem não está nesta lista (como você) continua com acesso completo.
+    O login é criado no Supabase (Authentication → convidar usuário); a própria pessoa cria a senha pelo link do convite.</p>
+    <div class="grid"><label>E-mail do usuário<input id="acEmail" type="email" placeholder="nome@empresa.com.br"></label><label>Nome<input id="acNome" placeholder="ex.: João Pedro"></label></div>
+    <div class="lbl" style="margin-top:8px">Módulos liberados<div class="opcoes">${chk('novomod', ['combustivel'])}</div></div>
+    <button class="pri" id="acAdd" style="margin-top:10px">+ Adicionar acesso</button></div>
+    <div class="card"><h2>Usuários com acesso limitado</h2>${ac.length?`<div class="tabela-wrap"><table><thead><tr><th>Usuário</th><th>Módulos liberados</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>`:'<p class="info" style="margin:0">Nenhum usuário com acesso limitado.</p>'}</div>`;
+}
+function prepAcessos(){
+  $('#acAdd')?.addEventListener('click', async ()=>{
+    const email = $('#acEmail').value.trim().toLowerCase(), mods = [...document.querySelectorAll('[data-novomod]:checked')].map(i=>i.dataset.novomod);
+    if(!/^\S+@\S+\.\S+$/.test(email)){ alert('Informe um e-mail válido.'); return; }
+    if((contrato.acessos||[]).some(a=>a.email===email)){ alert('Este e-mail já está na lista.'); return; }
+    if(!mods.length){ alert('Marque pelo menos um módulo.'); return; }
+    try{ await salvarContrato({ acessos:[...(contrato.acessos||[]), { email, nome:$('#acNome').value.trim(), modulos:mods }] }); toast('Acesso adicionado.'); renderTudo(); }catch(e){ alert('Não foi possível salvar: '+(e.message||e)); }
+  });
+  document.querySelectorAll('[data-salvarac]').forEach(b=>b.addEventListener('click', async ()=>{
+    const i = +b.dataset.salvarac, mods = [...document.querySelectorAll(`[data-linha="${i}"] [data-modac]:checked`)].map(x=>x.dataset.modac);
+    if(!mods.length){ alert('Marque pelo menos um módulo (ou use Remover).'); return; }
+    const ac = [...(contrato.acessos||[])]; ac[i] = { ...ac[i], modulos:mods };
+    try{ await salvarContrato({ acessos:ac }); toast('Acesso atualizado.'); renderTudo(); }catch(e){ alert('Não foi possível salvar: '+(e.message||e)); }
+  }));
+  document.querySelectorAll('[data-removerac]').forEach(b=>b.addEventListener('click', async ()=>{
+    const i = +b.dataset.removerac, a = (contrato.acessos||[])[i]; if(!a || !confirm(`Remover o acesso de ${a.email}?`)) return;
+    try{ await salvarContrato({ acessos:(contrato.acessos||[]).filter((_,j)=>j!==i) }); toast('Acesso removido.'); renderTudo(); }catch(e){ alert('Não foi possível salvar: '+(e.message||e)); }
+  }));
+}
 function prepReceita(){
   $('#recSalvarVM')?.addEventListener('click', async ()=>{
     const v = numBR($('#recVM').value); const o = { ...contrato, valorMensal: v===''?'':String(v) };
@@ -1303,7 +1341,7 @@ function telaLadoAr(k='ladoar'){
   const opcoes = ciclosLA().map(x=>`<option value="${x}" ${x===c?'selected':''}>${rotuloCicloLA(x)}</option>`).join('');
   const kpis = `<div class="kpis">${kpi('Áreas executadas', `${porSt('Executada').length} de ${l.length}`, `${pc(mExec)}% da metragem`)}${kpi('Metragem executada', num(mExec,0)+' m²', `de ${num(prev,0)} m² previstos`)}
     ${kpi('Em andamento', porSt('Em andamento').length, num(m2('Em andamento'),0)+' m²')}${kpi('Não executadas', porSt('Não executada').length, num(m2('Não executada'),0)+' m²')}
-    ${valorCiclo(ladoLA, c) ? kpi('Receita executada', `<span style="color:#1f6f4a">${brl(soma(porSt('Executada'),r=>valorAreaLA(r)))}</span>`, `de ${brl(valorCiclo(ladoLA, c))} do ciclo (${num(soma(porSt('Executada'),r=>valorAreaLA(r))/valorCiclo(ladoLA, c)*100,1)}%) · ${brl(soma(porSt('Em andamento'),r=>valorAreaLA(r)))} em andamento`) : ''}</div>`;
+    ${!semReceita() && valorCiclo(ladoLA, c) ? kpi('Receita executada', `<span style="color:#1f6f4a">${brl(soma(porSt('Executada'),r=>valorAreaLA(r)))}</span>`, `de ${brl(valorCiclo(ladoLA, c))} do ciclo (${num(soma(porSt('Executada'),r=>valorAreaLA(r))/valorCiclo(ladoLA, c)*100,1)}%) · ${brl(soma(porSt('Em andamento'),r=>valorAreaLA(r)))} em andamento`) : ''}</div>`;
   const barra = prev ? `<div class="dispbar" style="margin:10px 0 4px">${STATUS_LA.slice().reverse().map(s=>{ const v = m2(s); return v ? `<i style="width:${v/prev*100}%;background:${COR_LA[s]}" title="${s}: ${num(v,0)} m²">${pc(v)>=6?pc(v)+'%':''}</i>` : ''; }).join('')}</div>
     <div class="faixas" style="margin-bottom:10px">${STATUS_LA.slice().reverse().map(s=>`<div><i style="background:${COR_LA[s]}"></i>${s}: <b>${porSt(s).length}</b> área(s) · ${num(m2(s),0)} m²</div>`).join('')}</div>` : '';
   return `<div class="card"><div class="filtros"><h2 style="margin:0">${LADOS[ladoLA]} – andamento do ciclo</h2><span style="flex:1"></span>
@@ -2020,22 +2058,24 @@ async function salvarCalendarioRH(){
 function telaContratos(){
   $('#barraContrato').hidden = true; $('#navMods').hidden = true; $('#btnContratos').hidden = true; $('#btnBackup').hidden = true;
   const ordem = {Ativo:0,Suspenso:1,Encerrado:2};
-  const cards = [...contratos].sort((a,b)=>(ordem[a.status]??0)-(ordem[b.status]??0)||String(a.nome).localeCompare(b.nome)).map(c=>{
+  const restrito = usuarioRestrito(), lista = restrito ? contratos.filter(c=>acessoDe(c)) : contratos;
+  const cards = [...lista].sort((a,b)=>(ordem[a.status]??0)-(ordem[b.status]??0)||String(a.nome).localeCompare(b.nome)).map(c=>{
     const mods = (c.modulos?.length?c.modulos:MODULOS_OPCIONAIS.map(m=>m[0])).filter(id=>MODULOS_OPCIONAIS.some(m=>m[0]===id)).map(id=>tag(MODULOS_OPCIONAIS.find(m=>m[0]===id)?.[1]||id,'n')).join('');
     return `<div class="contrato"><div class="t">${esc(c.nome)}</div><div class="s">${esc([c.cliente,c.local].filter(Boolean).join(' · '))}${c.numero?' · Nº '+esc(c.numero):''}</div>
       <div>${sitTag(c.status||'Ativo')}${c.inicio?` <span class="s">${dataBR(c.inicio)}${c.fim?' a '+dataBR(c.fim):''}</span>`:''}</div><div class="mods">${mods}</div>
-      <div class="linha-botoes"><button class="pri" data-abrir="${c.id}">Abrir</button><button data-editar="contratos|${c.id}">Editar</button><button class="del" data-excluir="contratos|${c.id}">Excluir</button></div></div>`;
+      <div class="linha-botoes"><button class="pri" data-abrir="${c.id}">Abrir</button>${restrito?'':`<button data-editar="contratos|${c.id}">Editar</button><button class="del" data-excluir="contratos|${c.id}">Excluir</button>`}</div></div>`;
   });
   $('#conteudo').innerHTML = `<h2>Contratos</h2>
-    <details class="card" id="novoContrato" ${contratos.length?'':'open'}><summary>+ Novo contrato</summary><div class="card" style="border:none;padding:0;margin:0"><h2 hidden></h2>${formHTML('contratos')}</div></details>
+    ${restrito?'':`<details class="card" id="novoContrato" ${contratos.length?'':'open'}><summary>+ Novo contrato</summary><div class="card" style="border:none;padding:0;margin:0"><h2 hidden></h2>${formHTML('contratos')}</div></details>`}
     <div class="contratos">${cards.join('') || '<p class="info">Nenhum contrato cadastrado ainda. Use "+ Novo contrato" acima.</p>'}</div>`;
-  prepararForm('contratos');
+  if(!restrito) prepararForm('contratos');
 }
 function telaDoContrato(){
   const mods = modulosDoContrato();
-  if(!mods.some(m=>m.id===est.mod)){ est.mod='geral'; est.aba=0; }
+  if(!mods.some(m=>m.id===est.mod)){ est.mod=mods[0]?.id||'geral'; est.aba=0; }
+  if(!mods.length){ $('#conteudo').innerHTML = '<div class="card"><p>Seu usuário não tem módulos liberados neste contrato. Fale com o administrador.</p></div>'; return; }
   const mod = mods.find(m=>m.id===est.mod), aba = mod.abas[est.aba] || mod.abas[0];
-  $('#btnContratos').hidden = false; $('#btnBackup').hidden = false;
+  $('#btnContratos').hidden = false; $('#btnBackup').hidden = usuarioRestrito();
   const bc = $('#barraContrato'); bc.hidden = false;
   bc.innerHTML = `<div><div class="nome">${esc(contrato.nome)}</div><div class="sub">${esc([contrato.cliente,contrato.local].filter(Boolean).join(' · '))}</div></div>
     <div class="mes"><label style="flex-direction:row;align-items:center;gap:6px">Mês <input type="month" id="mesRef" value="${est.mes}" ${est.mes?'':'disabled'}></label>
@@ -2068,7 +2108,7 @@ document.addEventListener('click', async e=>{
   else if(b.dataset.limpar){ limparForm(b.dataset.limpar); }
   else if(b.dataset.csv){ exportarCSV(b.dataset.csv); }
   else if(b.dataset.csvtab){ exportarTabelaCSV(b.dataset.csvtab); }
-  else if(b.dataset.abrir){ contrato = contratos.find(c=>c.id===b.dataset.abrir); est.mod='geral'; est.aba=0; db={}; await carregarContrato(); renderTudo(); window.scrollTo(0,0); }
+  else if(b.dataset.abrir){ contrato = contratos.find(c=>c.id===b.dataset.abrir); est.mod = acessoDe(contrato) ? (acessoDe(contrato).modulos||[])[0] : 'geral'; est.aba=0; db={}; await carregarContrato(); renderTudo(); window.scrollTo(0,0); }
 });
 $('#btnContratos').addEventListener('click', ()=>{ contrato=null; db={}; renderTudo(); });
 $('#logo').addEventListener('click', ()=>{ contrato=null; db={}; renderTudo(); });
