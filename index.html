@@ -248,7 +248,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '7.4';
+const VERSAO = '7.5';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -491,15 +491,15 @@ const ENT = {
       col('Faca',r=>num(r.faca,0),{n:1,tot:l=>num(soma(l,r=>r.faca),0)}),col('Local',r=>r.local)] },
 
   ordens: { nome:'ordem de serviço', data:'inicio', campos:[
-      {k:'osArea',l:'Local / Área (ordens do Lado AR e Lado Terra)',t:'selectf',op:()=>opcoesOS(),req:1},{k:'numero',l:'Nº da OS (automático)',req:1},{k:'localOutro',l:'Local (quando for outro)',se:o=>o.osArea==='outro'},{k:'tipo',l:'Tipo de serviço',t:'select',op:['Roçada costal','Roçada com trator','Capina','Limpeza','Outro']},
-      {k:'inicio',l:'Início',t:'datetime',req:1},{k:'fim',l:'Fim',t:'datetime',req:1},{k:'qtdColab',l:'Qtd. de colaboradores',t:'number',step:'1',req:1},{k:'area',l:'Área (m²)',t:'number'},
+      {k:'osArea',l:'Local / Área (ordens do Lado AR e Lado Terra)',t:'selectf',op:()=>opcoesOS(),req:1},{k:'localOutro',l:'Local (quando for outro)',se:o=>o.osArea==='outro'},{k:'tipo',l:'Tipo de serviço',t:'select',op:['Roçada costal','Roçada de trator']},
+      {k:'inicio',l:'Início',t:'datetime',req:1},{k:'fim',l:'Fim',t:'datetime',req:1},{k:'qtdColab',l:'Qtd. de colaboradores',t:'number',step:'1',req:1},{k:'area',l:'Área (m²) – metragem da área',t:'number'},
       {k:'colabs',l:'Colaboradores que realizaram (marcar preenche a quantidade)',t:'multi',ent:'colaboradores',filtro:ativoColab},{k:'obs',l:'Descrição',t:'textarea'}],
-    validar:o=>horasEntre(o.inicio,o.fim)>0?'':'A data/hora de fim deve ser depois do início.',
-    paraForm:r=>({ osArea: r.osArea || (r.numero ? 'outro' : ''), localOutro: r.osArea ? '' : (r.localOutro ?? r.local ?? '') }),
-    antesSalvar:o=>{ const a = areaDaOS(o.osArea); if(a){ o.numero = a.area; o.local = a.localizacao || a.area; o.lado = LADOS[a._lado]; if(!+o.area && +a.metragem) o.area = a.metragem; } else { o.local = o.localOutro || o.local || ''; delete o.lado; } return o; },
+    validar:o=>o.osArea==='outro' && !String(o.localOutro||'').trim() ? 'Informe o local.' : horasEntre(o.inicio,o.fim)>0?'':'A data/hora de fim deve ser depois do início.',
+    paraForm:r=>({ osArea: r.osArea || ((r.numero||r.local) ? 'outro' : ''), localOutro: r.osArea ? '' : (r.localOutro ?? [r.numero, r.local].filter(Boolean).join(' – ')) }),
+    antesSalvar:o=>{ const a = areaDaOS(o.osArea); if(a){ o.numero = a.area; o.local = a.localizacao || a.area; o.lado = LADOS[a._lado]; if(+a.metragem) o.area = a.metragem; } else { o.local = o.localOutro || o.local || ''; o.numero = ''; delete o.lado; } return o; },
     aoMudar:(f,o)=>ajustarFormOS(f, true), ajustarForm:f=>ajustarFormOS(f, false),
     extra:f=>{ const h=horasEntre(f.inicio.value,f.fim.value), q=+f.qtdColab.value||0; return `Horas: ${h?hhmm(h):'–'} | Homem-hora: ${h&&q?num(h*q):'–'}`; },
-    cols:[col('Nº OS',r=>r.numero),col('Lado',r=>r.lado||''),col('Local',r=>r.local),col('Tipo',r=>r.tipo),col('Início',r=>dtBR(r.inicio)),col('Fim',r=>dtBR(r.fim)),
+    cols:[col('Lado',r=>r.lado||''),col('Área',r=>r.numero||''),col('Local',r=>r.local),col('Tipo',r=>r.tipo),col('Início',r=>dtBR(r.inicio)),col('Fim',r=>dtBR(r.fim)),
       col('Horas',r=>hhmm(horasEntre(r.inicio,r.fim)),{n:1,tot:l=>hhmm(soma(l,r=>horasEntre(r.inicio,r.fim)))}),col('Colab.',r=>r.qtdColab,{n:1}),
       col('Homem-hora',r=>num(horasEntre(r.inicio,r.fim)*(+r.qtdColab||0)),{n:1,tot:l=>num(soma(l,r=>horasEntre(r.inicio,r.fim)*(+r.qtdColab||0)))}),
       col('Equipe',r=>{ const n=(r.colabs||[]).map(nomeColab).join(', '); return n.length>40?n.slice(0,40)+'…':n; })] },
@@ -1082,10 +1082,10 @@ function areaDaOS(v){
   return r ? { ...r, _lado:k } : null;
 }
 function ajustarFormOS(f, mudou){
-  const v = f.elements.osArea?.value, a = areaDaOS(v), n = f.elements.numero; if(!n) return;
-  if(a){ n.value = a.area; n.readOnly = true; n.classList.add('calc'); n.title = 'Preenchido automaticamente pela área escolhida'; if(mudou && f.elements.area && !f.elements.area.value && +a.metragem) f.elements.area.value = a.metragem; }
-  else { n.readOnly = v!=='outro'; n.classList.toggle('calc', n.readOnly); n.title = ''; if(mudou && v==='outro' && n.dataset.auto) n.value = ''; }
-  n.dataset.auto = a ? '1' : '';
+  const v = f.elements.osArea?.value, a = areaDaOS(v), m = f.elements.area; if(!m) return;
+  if(a){ if(+a.metragem) m.value = a.metragem; m.readOnly = !!+a.metragem; m.classList.toggle('calc', m.readOnly); m.title = 'Metragem da área (automático)'; }
+  else { if(mudou && m.dataset.auto) m.value = ''; m.readOnly = false; m.classList.remove('calc'); m.title = ''; }
+  m.dataset.auto = a && +a.metragem ? '1' : '';
 }
 function prepPainelComb(){
   $('#pcColab')?.addEventListener('change', e=>{ est.painelColab = e.target.value; renderTudo(); });
