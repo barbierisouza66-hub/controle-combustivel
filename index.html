@@ -248,7 +248,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '7.6';
+const VERSAO = '7.7';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -876,10 +876,14 @@ function graficosOperacao(r, cid){
   const comPreco = r.ab.filter(a=>+a.valorLitro), precoMed = soma(comPreco,a=>a.litros) ? soma(comPreco,a=>(+a.litros)*(+a.valorLitro))/soma(comPreco,a=>a.litros) : 0;
   const diasCom = new Set(r.ab.map(a=>a.data)).size, roc = r.ab.filter(ehCostal), nRoc = new Set(roc.map(a=>a.equipId)).size;
   const mAnt = mesesAtras(mes, 2)[0], litAnt = soma(abT.filter(a=>String(a.data).slice(0,7)===mAnt),a=>a.litros), varPct = est.mes && litAnt ? (r.lit-litAnt)/litAnt*100 : null;
+  const imp = doMes(L('improdutividade'),'data');
+  const impM = ms.map(m=>{ const l = L('improdutividade').filter(x=>String(x.data).slice(0,7)===m); return { r:mesBR(m).split(' de ')[0].slice(0,3), t:mesBR(m), v:soma(l,horasImp), d:new Set(l.map(x=>x.data)).size, ch:soma(l.filter(x=>x.motivo==='Mau tempo / chuva'),horasImp) }; });
+  const impMot = agrupa(imp, r=>r.motivo||'—', horasImp);
   const sal = (()=>{ const mv = movEstoque().filter(m=>m.comb==='Gasolina'); return mv.length ? soma(mv,m=>m.q) : null; })();
   const ind = `<div class="kpis">${kpi('Custo médio do litro', precoMed?brl(precoMed):'—', comPreco.length+' abastecimento(s) com preço')}${kpi('Média por dia com abastecimento', diasCom?num(r.lit/diasCom)+' L':'—', diasCom+' dia(s) com lançamento')}
     ${kpi('Variação vs mês anterior', varPct===null?'—':`<span style="color:${varPct>0?'#b42318':'#1f6f4a'}">${varPct>0?'▲':'▼'} ${num(Math.abs(varPct),1)}%</span>`, varPct===null?'escolha um mês':`${num(litAnt)} L em ${mesBR(mAnt)}`)}
     ${kpi('Média por roçadeira costal', nRoc?num(soma(roc,a=>a.litros)/nRoc)+' L':'—', nRoc+' roçadeira(s) abastecida(s)')}${kpi('Nylon por OS', r.os.length?num(r.nylon/r.os.length):'—', r.os.length+' OS no período')}
+    ${kpi('Dias improdutivos', `<span style="color:${imp.length?'#b42318':'inherit'}">${new Set(imp.map(r=>r.data)).size}</span>`, `${hhmm(soma(imp,horasImp))} parados · ${new Set(imp.filter(r=>r.motivo==='Mau tempo / chuva').map(r=>r.data)).size} por chuva · ${new Set(imp.filter(motivoEquip).map(r=>r.data)).size} por equipamento`)}
     ${sal===null?'':kpi('Saldo de gasolina (estoque)', `<span style="color:${sal<0?'#b42318':'inherit'}">${num(sal)} L</span>`, 'galões das roçadeiras')}</div>`;
   const lados = progLado('ladoar') + progLado('ladoterra');
   const periodo = est.mes ? mesBR(est.mes) : 'todos os meses';
@@ -891,6 +895,8 @@ function graficosOperacao(r, cid){
       <div class="card"><h2>Combustível por tipo de equipamento <span class="s">· ${periodo}</span></h2><div class="tabela-wrap">${tabelaBarras(['Tipo','Litros','%'], porTipo.map(([t,v])=>[t,v,r.lit?num(v/r.lit*100,1)+'%':'']), v=>num(v)+' L')}</div></div>
       <div class="card"><h2>Consumo de nylon e faca – últimos 6 meses</h2>${svgBarras(nyM.map(({v2,...m})=>({...m,f:v2})),{cor:COR_G.nylon, valores:1, fmt:v=>num(v), sub:m=>num(m.f,0)+' faca'+(m.f==1?'':'s'), corSub:COR_G.faca})}${legendaG([['Nylon (quantidade lançada)',COR_G.nylon],['Facas (embaixo)',COR_G.faca]])}</div>
       <div class="card"><h2>Ordens de serviço – últimos 6 meses</h2>${svgBarras(osM.map(({v2,...m})=>({...m,q:v2})),{cor:COR_G.os, valores:1, fmt:v=>hhmm(v), fmtVal:v=>num(v,0), sub:m=>num(m.q,0)+' OS', fmtEixo:v=>num(v,0)})}${legendaG([[cid?'Horas trabalhadas':'Homem-hora',COR_G.os],['Quantidade de OS (embaixo)','#1d2420']])}</div>
+      <div class="card"><h2>Improdutividade – últimos 6 meses</h2>${svgBarras(impM,{cor:'#b42318', valores:1, fmt:v=>hhmm(v), fmtVal:v=>hhmm(v), fmtEixo:v=>num(v,0)+'h', sub:p=>p.d+' dia'+(p.d==1?'':'s'), corSub:'#b42318'})}${legendaG([['Horas paradas no mês','#b42318'],['Dias com parada (embaixo)','#1d2420']])}</div>
+      <div class="card"><h2>Horas paradas por motivo <span class="s">· ${periodo}</span></h2><div class="tabela-wrap">${tabelaBarras(['Motivo','Horas','Dias'], impMot.map(([m,v])=>[m,v,new Set(imp.filter(r=>(r.motivo||'—')===m).map(r=>r.data)).size]), v=>hhmm(v))}</div>${imp.length?`<div class="s" style="margin-top:6px">Homem-hora perdido: <b>${num(soma(imp,r=>horasImp(r)*(+r.qtdColab||0)))}</b> · detalhes em Operação → Improdutividade diária</div>`:''}</div>
       <div class="card"><h2>${cid?'Horas':'Homem-hora'} por tipo de serviço <span class="s">· ${periodo}</span></h2><div class="tabela-wrap">${tabelaBarras(['Serviço',cid?'Horas':'Homem-hora'], osTipo, v=>hhmm(v))}</div></div>
     </div>
     ${lados?`<div class="card"><h2>Andamento da roçada – ciclo atual</h2>${lados}${legendaG([['Executada',COR_LA['Executada']],['Em andamento',COR_LA['Em andamento']],['Não executada',COR_LA['Não executada']],['Linha tracejada: ritmo esperado hoje','#1d2420']])}</div>`:''}`;
