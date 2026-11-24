@@ -149,6 +149,7 @@
   .tag.w{background:var(--warn2);color:var(--warn)}
   .tag.d{background:var(--danger2);color:var(--danger)}
   .tag.n{background:#eef0ef;color:var(--muted)}
+  .fotosPrev{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}.fotosPrev .ft{position:relative;width:96px;height:72px;border-radius:6px;overflow:hidden;border:1px solid var(--line);background:#eef0ef}.fotosPrev .ft img{width:100%;height:100%;object-fit:cover;display:block}.fotosPrev .ft button{position:absolute;top:2px;right:2px;padding:0 6px;font-size:12px;line-height:18px;background:#fff;border-radius:50%}.fotosPrev .ft.nova{outline:2px solid var(--pri)}.fotosPrev .ft.rem{opacity:.3}
   .checks{display:flex;flex-wrap:wrap;gap:6px 14px;padding:8px;border:1px solid var(--line);border-radius:6px;max-height:150px;overflow:auto}
   .checks label{flex-direction:row;align-items:center;gap:6px;color:var(--ink);font-size:14px}
   .info{font-size:13px;color:var(--muted);margin-top:8px}
@@ -248,7 +249,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '7.7';
+const VERSAO = '7.8';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -557,6 +558,27 @@ const ENT = {
       col('Operador',r=>r.colabId?nomeColab(r.colabId):'')] },
 };
 ENT.ladoterra = { ...ENT.ladoar, nome:'área do Lado Terra', filtroLista:r=>cicloLA(r)===cicloAtualLA('ladoterra') };
+/* ===== Atividades diárias (o que antes ia por e-mail ao contratante): área do Lado AR/Terra, horário, status e fotos ===== */
+const STATUS_ATV = ['Finalizado','Em execução'], TURNOS_ATV = ['Noturno','Diurno'];
+const minutosAtv = r => { if(!r.hIni || !r.hFim) return 0; const m = t => { const [h,mm] = t.split(':').map(Number); return h*60+mm; }; let d = m(r.hFim) - m(r.hIni); if(d<0) d += 1440; return d; };   // turno noturno pode virar a meia-noite
+const liberarM2 = f => { const m = f.elements.area; if(m){ m.readOnly = false; m.classList.remove('calc'); m.title = 'Preenchida com a metragem da área; pode ajustar se foi feita só uma parte'; } };
+const horarioAtv = r => r.hIni ? `${r.hIni.replace(':','h')}${r.hFim?' às '+r.hFim.replace(':','h'):''}` : '';
+ENT.atividades = { nome:'atividade diária', data:'data', manter:['fotos'], campos:[
+    {k:'data',l:'Data (início da atividade)',t:'date',req:1},{k:'turno',l:'Turno',t:'select',op:TURNOS_ATV},
+    {k:'osArea',l:'Área (Lado AR / Lado Terra)',t:'selectf',ph:'Selecione a área…',op:()=>opcoesOS(),req:1},{k:'localOutro',l:'Área / local (quando for outro)',se:o=>o.osArea==='outro'},
+    {k:'area',l:'Metragem (m²)',t:'number'},{k:'hIni',l:'Horário de início',t:'time'},{k:'hFim',l:'Horário de fim',t:'time'},
+    {k:'status',l:'Status',t:'select',op:STATUS_ATV},{k:'qtdColab',l:'Qtd. de colaboradores',t:'number',step:'1'},
+    {k:'syncLA',l:'Atualizar o status da área no Lado AR / Terra',t:'select',op:['Sim','Não'],se:o=>!!o.osArea && o.osArea!=='outro'},
+    {k:'obs',l:'Observação',t:'textarea'},{k:'fotos',l:'Fotos da atividade',t:'fotos'}],
+  validar:o=>o.osArea==='outro' && !String(o.localOutro||'').trim() ? 'Informe a área / local.' : '',
+  antesSalvar:o=>{ const a = areaDaOS(o.osArea); if(a){ o.numero = a.area; o.local = a.localizacao || ''; o.lado = LADOS[a._lado]; if(+a.metragem && !+o.area) o.area = a.metragem; } else { o.numero = ''; o.local = o.localOutro || ''; delete o.lado; } return o; },
+  aoMudar:(f,o)=>{ ajustarFormOS(f, true); liberarM2(f); }, ajustarForm:f=>{ ajustarFormOS(f, false); liberarM2(f); fotosDoForm(f); },
+  preSalvar:(o, f)=>enviarFotosAtv(o, f), falhaSalvar:pre=>{ if(pre?.novas?.length) sb.storage.from(BUCKET_DOCS).remove(pre.novas); },
+  posSalvar:async (o, pre)=>{ if(pre?.remover?.length) sb.storage.from(BUCKET_DOCS).remove(pre.remover); return await sincronizarLA(o); },
+  extra:f=>{ const m = minutosAtv({hIni:f.hIni.value, hFim:f.hFim.value}); return `Duração: ${m?hhmm(m/60):'–'}`; },
+  cols:[col('Data',r=>dataBR(r.data)),col('Turno',r=>r.turno),col('Lado',r=>r.lado||''),col('Área',r=>r.numero||''),col('Localização',r=>r.local),
+    col('m²',r=>r.area?num(r.area,0):'',{n:1,tot:l=>num(soma(l,r=>r.area),0)}),col('Horário',r=>horarioAtv(r)),
+    col('Status',r=>tag(r.status||'', r.status==='Finalizado'?'':'w'),{html:1}),col('Fotos',r=>(r.fotos||[]).length||'',{n:1,tot:l=>soma(l,r=>(r.fotos||[]).length)}),col('Observação',r=>r.obs)] };
 ENT.frequencia = { nome:'frequência', data:'data', campos:[], cols:[] };
 // Ocorrências antigas tinham só "tipo": aqui viram situação/motivo/atestado.
 function situacaoOc(r){
@@ -569,12 +591,12 @@ function situacaoOc(r){
 const he50Oc = r => (+r.he50||0) + (r.tipo==='Hora extra 50%' ? (+r.horas||0) : 0);
 const he100Oc = r => (+r.he100||0) + (r.tipo==='Hora extra 100%' ? (+r.horas||0) : 0);
 const heOc = r => he50Oc(r) + he100Oc(r);
-const COLECOES_CONTRATO = ['colaboradores','equipamentos','custos','lli','ladoar','ladoterra','quadro','vagas','ocorrencias','abastecimentos','abastposto','receitas','improdutividade','nylon','ordens','manutencoes','fardos','frequencia'];
+const COLECOES_CONTRATO = ['colaboradores','equipamentos','custos','lli','ladoar','ladoterra','quadro','vagas','ocorrencias','abastecimentos','abastposto','receitas','improdutividade','nylon','ordens','manutencoes','fardos','frequencia','atividades'];
 
 /* ===================== MÓDULOS E ABAS ===================== */
 const MODULOS = [
   { id:'geral', nome:'Visão geral', abas:[ {nome:'Resumo do mês', painel:()=>painelGeral()} ] },
-  { id:'combustivel', nome:'Operação', abas:[ {nome:'Painel', painel:()=>painelCombustivel(), depois:()=>prepPainelComb()}, {nome:'Abastecimento de equipamento', painel:()=>cardSaldoComb()+telaEntidade('abastecimentos'), depois:()=>prepararForm('abastecimentos')}, {nome:'Abastecimento posto', painel:()=>cardSaldoComb(true)+telaEntidade('abastposto'), depois:()=>prepAbastPosto()}, {nome:'Consumo de nylon e faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'Improdutividade diária', painel:()=>painelImprod()+telaEntidade('improdutividade'), depois:()=>prepararForm('improdutividade')}, {nome:'Lado AR', painel:()=>telaLadoAr('ladoar'), depois:()=>prepLadoAr('ladoar')}, {nome:'Lado Terra', painel:()=>telaLadoAr('ladoterra'), depois:()=>prepLadoAr('ladoterra')} ] },   // abas de RH retiradas do Combustível (o RH fica no módulo RH)
+  { id:'combustivel', nome:'Operação', abas:[ {nome:'Painel', painel:()=>painelCombustivel(), depois:()=>prepPainelComb()}, {nome:'Abastecimento de equipamento', painel:()=>cardSaldoComb()+telaEntidade('abastecimentos'), depois:()=>prepararForm('abastecimentos')}, {nome:'Abastecimento posto', painel:()=>cardSaldoComb(true)+telaEntidade('abastposto'), depois:()=>prepAbastPosto()}, {nome:'Consumo de nylon e faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'Improdutividade diária', painel:()=>painelImprod()+telaEntidade('improdutividade'), depois:()=>prepararForm('improdutividade')}, {nome:'Lado AR', painel:()=>telaLadoAr('ladoar'), depois:()=>prepLadoAr('ladoar')}, {nome:'Lado Terra', painel:()=>telaLadoAr('ladoterra'), depois:()=>prepLadoAr('ladoterra')}, {nome:'Atividades diárias', painel:()=>telaAtividades(), depois:()=>prepAtividades()} ] },   // abas de RH retiradas do Combustível (o RH fica no módulo RH)
   { id:'rh', nome:'RH', abas:[ {nome:'Painel', painel:()=>painelRH()}, {nome:'Ocorrências – calendário do mês', painel:()=>telaCalendarioRH(), depois:()=>prepCalendarioRH()}, {nome:'Quadro previsto e vagas', painel:()=>telaQuadroVagas(), depois:()=>{ prepararForm('quadro'); prepararForm('vagas'); }} ] },
   { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', painel:()=>graficoDispEquip() + telaEntidade('manutencoes'), depois:()=>prepararForm('manutencoes')}, {nome:'Documentos – CRLV e opacidade', painel:()=>telaDocsEquip(), depois:()=>prepDocsEquip()}, {nome:'Custos por equipamento', painel:()=>telaCustosEquip(), depois:()=>prepararForm('custos')}, {nome:'LLI', painel:()=>telaLLI(), depois:()=>prepLLI()} ] },
   { id:'receita', nome:'Receita / Contrato', abas:[ {nome:'Painel', painel:()=>painelReceita(), depois:()=>prepReceita()}, {nome:'Faturamento e recebimentos', painel:()=>telaEntidade('receitas'), depois:()=>prepReceitas()}, {nome:'Documentos do contrato', painel:()=>telaDocsContrato(), depois:()=>prepDocsContrato()} ] },
@@ -641,6 +663,8 @@ async function excluir(k, id){
   const { error } = await sb.from(TABELA).delete().eq('id', id);
   carregando(false);
   if(error){ alert('Não foi possível excluir: '+error.message); return; }
+  const fotosRem = (k==='contratos' ? [] : (L(k).find(x=>x.id===id)?.fotos||[])).map(x=>x.path).filter(Boolean);
+  if(fotosRem.length) sb.storage.from(BUCKET_DOCS).remove(fotosRem);
   if(k==='contratos') contratos = contratos.filter(x=>x.id!==id); else db[k] = L(k).filter(x=>x.id!==id);
   toast('Excluído.'); renderTudo();
 }
@@ -657,9 +681,10 @@ function campoHTML(k, f){
       const ops = opcoesRef(f);
       return `<label class="largo">${rot}<div class="checks" data-multi="${f.k}">${ops.map(([v,t])=>`<label><input type="checkbox" value="${esc(v)}"> ${esc(t)}</label>`).join('') || '<span class="info" style="margin:0">Nenhum cadastro ativo.</span>'}</div></label>`;
     }
+    case 'fotos': return `<div class="lbl largo">${rot}<input type="file" accept="image/*" multiple data-fotosarq="${f.k}"><span class="s">Pode escolher várias fotos de uma vez (no celular abre a câmera ou a galeria). As fotos são reduzidas automaticamente antes de enviar.</span><div class="fotosPrev" data-fotosprev="${f.k}"></div></div>`;
     case 'textarea': return `<label class="largo">${rot}<textarea name="${f.k}" rows="2"></textarea></label>`;
     case 'selectf': { const g = {}; f.op().forEach(([v,t,gr])=>{ (g[gr||'']||=[]).push(`<option value="${esc(v)}">${esc(t)}</option>`); });
-      return `<label>${rot}<select name="${f.k}"${req}><option value="">Selecione a ordem…</option>${Object.entries(g).map(([gr,ops])=>gr?`<optgroup label="${esc(gr)}">${ops.join('')}</optgroup>`:ops.join('')).join('')}</select></label>`; }
+      return `<label>${rot}<select name="${f.k}"${req}><option value="">${esc(f.ph||'Selecione a ordem…')}</option>${Object.entries(g).map(([gr,ops])=>gr?`<optgroup label="${esc(gr)}">${ops.join('')}</optgroup>`:ops.join('')).join('')}</select></label>`; }
     case 'select': return `<label>${rot}<select name="${f.k}"${req}>${f.vazio?'<option value="">Selecione…</option>':''}${f.op.map(o=>`<option>${esc(o)}</option>`).join('')}</select></label>`;
     case 'opcoes': return `<div class="lbl">${rot}<div class="opcoes" data-opcoes="${f.k}">${f.op.map(o=>{ const [v,t]=Array.isArray(o)?o:[o,o]; return `<label class="chk"><input type="checkbox" name="${f.k}" value="${esc(v)}"> ${esc(t)}</label>`; }).join('')}</div></div>`;
     case 'ref': {
@@ -684,7 +709,7 @@ function atualizarVisiveis(k){
   E.campos.forEach(c=>{ if(!c.se) return; const w = f.querySelector(`[data-campo="${c.k}"]`); if(w) w.hidden = !c.se(o); });
 }
 function formHTML(k){
-  const E = ENT[k], largos = f => ['multi','textarea'].includes(f.t);
+  const E = ENT[k], largos = f => ['multi','textarea','fotos'].includes(f.t);
   return `<form id="form_${k}" data-ent="${k}"><input type="hidden" name="id">
     <div class="grid">${E.campos.filter(f=>!largos(f)).map(f=>campoComMarca(k,f)).join('')}</div>
     ${E.campos.filter(largos).map(f=>campoComMarca(k,f)).join('')}
@@ -705,8 +730,12 @@ function prepararForm(k){
     if(k==='colaboradores' && o.id){ const ant = L(k).find(x=>x.id===o.id); if(salOculto(ant)){ o.salario = ant.salario ?? ''; o.valorHora = ant.valorHora ?? ''; } }   // documentos anexados etc.
     if(E.antesSalvar) o = E.antesSalvar(o);
     if(k!=='contratos' && !o.id) o.criadoPor = $('#usuarioEmail').textContent;
-    try{ await gravar(k, o); }catch(err){ alert('Não foi possível salvar: '+(err.message||err)); return; }
-    toast('Salvo!'); renderTudo();
+    let pre = null;
+    if(E.preSalvar){ try{ pre = await E.preSalvar(o, f); }catch(err){ carregando(false); alert('Não foi possível enviar as fotos: '+(err.message||err)); return; } }   // ex.: envio das fotos
+    try{ await gravar(k, o); }catch(err){ E.falhaSalvar?.(pre); alert('Não foi possível salvar: '+(err.message||err)); return; }
+    let msgPos = '';
+    if(E.posSalvar){ try{ msgPos = await E.posSalvar(o, pre); }catch(err){ console.error(err); } }
+    toast(msgPos || 'Salvo!'); renderTudo();
   });
   if(E.extra){ const up=()=>$('#extra_'+k).textContent=E.extra(f); f.addEventListener('input',up); f.addEventListener('change',up); }
   f.querySelectorAll('[data-moeda]').forEach(i=>i.addEventListener('blur', ()=>{ const n = numBR(i.value); if(n!=='') i.value = fmtBR(n); }));
@@ -1524,6 +1553,153 @@ function prepLadoAr(k='ladoar'){
     }catch(e){ alert('Não foi possível criar o ciclo: '+(e.message||e)); }
     carregando(false); renderTudo();
   });
+}
+/* ===================== ATIVIDADES DIÁRIAS ===================== */
+// Fotos no formulário: mostra as já salvas (✕ marca para remover) e as novas escolhidas (✕ tira da lista)
+function fotosDoForm(f){
+  const box = f.querySelector('[data-fotosprev="fotos"]'), inp = f.querySelector('[data-fotosarq="fotos"]'); if(!box || !inp) return;
+  const id = f.elements.id.value, r = id ? L('atividades').find(x=>x.id===id) : null;
+  f._novas = []; f._remover = new Set();
+  const desenhar = () => {
+    box.innerHTML = (r?.fotos||[]).map(x=>`<div class="ft ${f._remover.has(x.path)?'rem':''}" title="${esc(x.nome||'')}"><img data-fpath="${esc(x.path)}" alt=""><button type="button" data-remfoto="${esc(x.path)}" title="${f._remover.has(x.path)?'Manter a foto':'Remover a foto'}">${f._remover.has(x.path)?'↺':'✕'}</button></div>`).join('')
+      + f._novas.map((n,i)=>`<div class="ft nova" title="${esc(n.file.name)} (nova)"><img src="${n.url}" alt=""><button type="button" data-tirarnova="${i}" title="Tirar da lista">✕</button></div>`).join('');
+    const paths = (r?.fotos||[]).map(x=>x.path);
+    if(paths.length) sb.storage.from(BUCKET_DOCS).createSignedUrls(paths, 600).then(({data})=>(data||[]).forEach(d=>{ const im = box.querySelector(`img[data-fpath="${CSS.escape(d.path)}"]`); if(im && d.signedUrl) im.src = d.signedUrl; }));
+  };
+  inp.onchange = () => { [...inp.files].forEach(file=>f._novas.push({ file, url:URL.createObjectURL(file) })); inp.value = ''; desenhar(); };
+  box.onclick = e => { const b = e.target.closest('button'); if(!b) return;
+    if(b.dataset.remfoto){ const p = b.dataset.remfoto; f._remover.has(p) ? f._remover.delete(p) : f._remover.add(p); }
+    if(b.dataset.tirarnova!==undefined){ const [n] = f._novas.splice(+b.dataset.tirarnova, 1); if(n) URL.revokeObjectURL(n.url); }
+    desenhar(); };
+  desenhar();
+}
+// Reduz a foto (máx. 1600 px, JPEG) antes de enviar: economiza espaço e deixa o PDF leve
+async function comprimirFoto(file, max=1600, q=0.82){
+  try{
+    const bmp = await createImageBitmap(file, { imageOrientation:'from-image' }), e = Math.min(1, max/Math.max(bmp.width, bmp.height));
+    const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width*e); cv.height = Math.round(bmp.height*e);
+    cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height); bmp.close?.();
+    const blob = await new Promise(ok=>cv.toBlob(ok, 'image/jpeg', q));
+    return blob && (blob.size < file.size || !/jpe?g/i.test(file.type)) ? blob : file;
+  }catch(e){ return file; }   // formato que o navegador não abre: envia como está
+}
+async function enviarFotosAtv(o, f){
+  const rem = [...(f._remover||[])], novas = f._novas||[], enviados = [];
+  o.fotos = (o.fotos||[]).filter(x=>!rem.includes(x.path));
+  if(!novas.length) return { novas:[], remover:rem };
+  carregando(true);
+  try{
+    for(let i=0; i<novas.length; i++){
+      const arq = await comprimirFoto(novas[i].file), ext = arq===novas[i].file ? ((arq.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg') : 'jpg';
+      const path = `${contrato.id}/atividades/${o.data||hoje()}_${Date.now()}_${i}.${ext}`;
+      const { error } = await sb.storage.from(BUCKET_DOCS).upload(path, arq, { upsert:false, contentType: arq.type || 'image/jpeg' });
+      if(error) throw error;
+      enviados.push(path); o.fotos.push({ path, nome:novas[i].file.name, tam:arq.size });
+    }
+  }catch(e){ if(enviados.length) sb.storage.from(BUCKET_DOCS).remove(enviados); throw e; }
+  finally{ carregando(false); }
+  novas.forEach(n=>URL.revokeObjectURL(n.url));
+  return { novas:enviados, remover:rem };
+}
+// Finalizado → área "Executada"; Em execução → "Em andamento" (nunca rebaixa uma área já executada)
+async function sincronizarLA(o){
+  if(o.syncLA!=='Sim') return '';
+  const [k, cod] = String(o.osArea||'').split('|'); if(!LADOS[k]) return '';
+  const l = L(k).filter(x=>x.area===cod), r = l.find(x=>x.cicloIni<=o.data && o.data<=x.cicloFim) || l.find(x=>cicloLA(x)===cicloAtualLA(k)) || l[l.length-1]; if(!r) return '';
+  const novo = o.status==='Finalizado' ? 'Executada' : 'Em andamento', atual = r.status || 'Não executada';
+  if(atual===novo || (atual==='Executada' && novo==='Em andamento')) return '';
+  const x = { ...r, status:novo }; if(novo==='Executada' && !x.dataConclusao) x.dataConclusao = o.data;
+  await gravar(k, ajustarLA(x));
+  return `Salvo! ${r.area} marcada como "${novo}" no ${LADOS[k]}.`;
+}
+function filtroAtv(){ return est.atv ||= { de:addDias(hoje(),-1), ate:hoje(), turno:'', lado:'' }; }
+const ordemAtv = r => `${r.data}|${r.turno==='Noturno' && (r.hIni||'') < '12:00' ? '1' : '0'}${r.hIni||''}`;
+function atividadesRel(){
+  const F = filtroAtv();
+  return L('atividades').filter(r=>(!F.de || r.data>=F.de) && (!F.ate || r.data<=F.ate) && (!F.turno || r.turno===F.turno) && (!F.lado || r.lado===F.lado)).sort((a,b)=>ordemAtv(a).localeCompare(ordemAtv(b)));
+}
+function telaAtividades(){
+  const F = filtroAtv(), l = atividadesRel(), fin = l.filter(r=>r.status==='Finalizado'), exe = l.filter(r=>r.status!=='Finalizado');
+  const sel = (id, ops, v) => `<select id="${id}">${ops.map(([x,t])=>`<option value="${x}" ${x===v?'selected':''}>${t}</option>`).join('')}</select>`;
+  return `<div class="card"><h2>Relatório gerencial – Atividades diárias</h2>
+    <p class="info">Lance abaixo cada área trabalhada no dia/noite (com horário, status e fotos). Depois escolha o período e clique em <b>Gerar PDF</b> para enviar ao contratante.</p>
+    <div class="filtros"><label style="flex-direction:row;align-items:center;gap:6px">De <input type="date" id="atvDe" value="${F.de}"></label><label style="flex-direction:row;align-items:center;gap:6px">Até <input type="date" id="atvAte" value="${F.ate}"></label>
+      <label style="flex-direction:row;align-items:center;gap:6px">Turno ${sel('atvTurno', [['','Todos'],['Noturno','Noturno'],['Diurno','Diurno']], F.turno)}</label>
+      <label style="flex-direction:row;align-items:center;gap:6px">Lado ${sel('atvLado', [['','Todos'],['Lado AR','Lado AR'],['Lado Terra','Lado Terra']], F.lado)}</label>
+      <span style="flex:1"></span><button class="pri" id="atvPDF" ${l.length?'':'disabled'}>📄 Gerar PDF</button></div>
+    <div class="kpis" style="margin-top:10px">${kpi('Áreas atendidas', l.length, [['Lado AR'],['Lado Terra']].map(([x])=>`${l.filter(r=>r.lado===x).length} ${x}`).join(' · '))}${kpi('Metragem trabalhada', num(soma(l,r=>r.area),0)+' m²')}
+      ${kpi('Finalizadas', fin.length, num(soma(fin,r=>r.area),0)+' m²')}${kpi('Em execução', exe.length, num(soma(exe,r=>r.area),0)+' m²')}${kpi('Fotos', soma(l,r=>(r.fotos||[]).length))}</div>
+    ${l.length?'':'<p class="info" style="margin:8px 0 0">Nenhuma atividade neste período/filtro.</p>'}</div>` + telaEntidade('atividades');
+}
+function prepAtividades(){
+  prepararForm('atividades');
+  const F = filtroAtv();
+  [['atvDe','de'],['atvAte','ate'],['atvTurno','turno'],['atvLado','lado']].forEach(([id,k])=>$('#'+id)?.addEventListener('change', e=>{ F[k] = e.target.value; renderTudo(); }));
+  $('#atvPDF')?.addEventListener('click', ()=>gerarPdfAtv());
+}
+// Recorta a foto em 4:3 para a grade do PDF
+async function recortarFoto(blob, W=480, H=360){
+  const bmp = await createImageBitmap(blob, { imageOrientation:'from-image' }), r = W/H;
+  let sw = bmp.width, sh = bmp.height; if(sw/sh > r) sw = sh*r; else sh = sw/r;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  cv.getContext('2d').drawImage(bmp, (bmp.width-sw)/2, (bmp.height-sh)/2, sw, sh, 0, 0, W, H); bmp.close?.();
+  return cv.toDataURL('image/jpeg', 0.8);
+}
+function relatorioAtvHTML(l, imgs){
+  const F = filtroAtv(), verde='#1f6f4a', lar='#d97706', mut='#5f6b65';
+  const periodo = !F.de && !F.ate ? 'todo o período' : F.de===F.ate ? dataBR(F.de) : `${dataBR(F.de)||'início'} a ${dataBR(F.ate)||'hoje'}`;
+  const fin = l.filter(r=>r.status==='Finalizado'), exe = l.filter(r=>r.status!=='Finalizado'), m2 = x => soma(x, r=>r.area), min = soma(l, minutosAtv), hh = soma(l, r=>minutosAtv(r)/60*(+r.qtdColab||0));
+  const box = (t,v,s,cor='#1d2420') => `<td style="width:25%;padding:0 4px"><div style="border:1px solid #dfe4e1;border-radius:6px;padding:7px 9px"><div style="font-size:10px;color:${mut}">${t}</div><div style="font-size:19px;font-weight:700;color:${cor};margin:2px 0">${v}</div><div style="font-size:9.5px;color:${mut}">${s}</div></div></td>`;
+  const th = `style="background:${verde};color:#fff;text-align:left;padding:4px 6px;font-size:10px"`;
+  const stTag = st => `<span style="color:${st==='Finalizado'?verde:lar};font-weight:700">${esc(st||'')}</span>`;
+  const lados = ['Lado AR','Lado Terra','Outros'].map(x=>[x, l.filter(r=>(r.lado||'Outros')===x)]).filter(([,v])=>v.length);
+  const resumoLado = lados.map(([x,v])=>`<tr><td><b>${x}</b></td><td style="text-align:right">${v.length}</td><td style="text-align:right">${brN(m2(v))}</td><td style="text-align:right">${v.filter(r=>r.status==='Finalizado').length}</td><td style="text-align:right">${v.filter(r=>r.status!=='Finalizado').length}</td></tr>`).join('');
+  const ciclo = ['ladoar','ladoterra'].map(k=>{ const c = cicloAtualLA(k); if(!c) return ''; const a = L(k).filter(r=>cicloLA(r)===c), prev = soma(a,r=>r.metragem), ex = a.filter(r=>r.status==='Executada'), mE = soma(ex,r=>+r.metragemFinal||+r.metragem);
+    return `<tr><td><b>${LADOS[k]}</b></td><td>${rotuloCicloLA(c).split(' (')[0]}</td><td style="text-align:right">${ex.length} de ${a.length}</td><td style="text-align:right">${brN(mE)} de ${brN(prev)} m²</td><td style="text-align:right;font-weight:700;color:${verde}">${prev?brN(mE/prev*100,1)+'%':'—'}</td></tr>`; }).join('');
+  const linhas = l.map(r=>`<tr><td>${dataBR(r.data).slice(0,5)}</td><td>${esc(r.turno||'')}</td><td>${esc(r.lado||'')}</td><td style="font-weight:700">${esc(r.numero||'')}</td><td>${esc(r.local||'')}</td><td style="text-align:right">${r.area?brN(r.area):''}</td><td style="white-space:nowrap">${horarioAtv(r)}</td><td>${stTag(r.status)}</td></tr>`).join('');
+  const blocos = l.map(r=>{ const fs = imgs[r.id]||[], titulo = [r.numero, r.local].filter(Boolean).join(' – ') || 'Atividade';
+    const cab = (cont) => `<div style="font-size:11.5px;font-weight:700;margin-bottom:5px">${esc(titulo)}${cont?' <span style="color:'+mut+';font-weight:400">(continuação)</span>':''}</div>
+      <div style="font-size:10px;color:${mut};margin-bottom:6px">${[dataBR(r.data), r.turno?'Turno '+r.turno.toLowerCase():'', r.lado, r.area?brN(r.area)+' m²':'', horarioAtv(r)?'Horário '+horarioAtv(r):'', r.qtdColab?r.qtdColab+' colaboradores':''].filter(Boolean).join(' · ')} · ${stTag(r.status)}</div>
+      ${!cont && r.obs?`<div style="font-size:10px;margin-bottom:6px">${esc(r.obs)}</div>`:''}`;
+    if(!fs.length) return `<div class="av" style="border-left:3px solid ${verde};padding:6px 0 6px 10px;margin:0 0 12px">${cab(false)}<div style="font-size:10px;color:${mut}">Sem fotos registradas.</div></div>`;
+    const partes = []; for(let i=0; i<fs.length; i+=6) partes.push(fs.slice(i,i+6));
+    return partes.map((p,pi)=>`<div class="av" style="border-left:3px solid ${verde};padding:6px 0 6px 10px;margin:0 0 12px">${cab(pi>0)}
+      <table class="semlinha" style="border-collapse:separate;border-spacing:0 4px">${[0,3].filter(i=>p[i]).map(i=>`<tr>${p.slice(i,i+3).map(d=>`<td style="padding:0 6px 0 0"><img src="${d}" style="width:232px;height:174px;display:block;border-radius:4px"></td>`).join('')}</tr>`).join('')}</table></div>`).join(''); }).join('');
+  const lados2 = lados.map(([x,v])=>`${v.length} no ${x}`).join(' e ');
+  return `<div id="relAtv" style="width:760px;"><style>#relAtv td,#relAtv th{padding:3px 6px;text-transform:none;letter-spacing:0;font-weight:inherit;vertical-align:middle;border-bottom:1px solid #e6e9e7}#relAtv table.semlinha td{border:none}#relAtv .relTab td{font-size:9.5px}#relAtv .relTab th{font-weight:700}</style><div style="width:760px;padding:10px 18px;font-family:Inter,Arial,sans-serif;color:#1d2420;background:#fff">
+    <div style="border-top:3px solid ${verde};padding-top:10px"><div style="font-size:22px;font-weight:700">Relatório Gerencial – Atividades Diárias</div>
+    <div style="font-size:11.5px;color:${mut};margin-top:3px">Contrato ${esc(contrato.nome)} · Período: ${periodo}${F.turno?' · Turno '+F.turno.toLowerCase():''}${F.lado?' · '+F.lado:''} · Emitido em ${dataBR(hoje())}</div></div>
+    <table class="semlinha" style="width:100%;border-collapse:separate;margin:12px -4px 8px"><tr>${box('Áreas atendidas', l.length, lados2)}${box('Metragem trabalhada', brN(m2(l))+' m²', min?'Tempo de serviço: '+hhmm(min/60):'')}${box('Finalizadas', fin.length, brN(m2(fin))+' m²', verde)}${box('Em execução', exe.length, brN(m2(exe))+' m²', lar)}</tr></table>
+    <div style="font-size:14px;font-weight:700;margin:12px 0 4px">Resumo</div>
+    <p style="font-size:11.5px;line-height:1.5;margin:0">No período de ${periodo}${F.turno?', turno '+F.turno.toLowerCase():''}, ${l.length===1?'foi atendida <b>1 área</b>':`foram atendidas <b>${l.length} áreas</b>`} (${lados2}), somando <b>${brN(m2(l))} m²</b>. ${fin.length===1?'<b>1 foi finalizada</b>':`<b>${fin.length} foram finalizadas</b>`} (${brN(m2(fin))} m²)${exe.length?` e ${exe.length===1?'<b>1 segue em execução</b>':`<b>${exe.length} seguem em execução</b>`} (${brN(m2(exe))} m²)`:''}.${min?` O tempo total de serviço registrado foi de ${hhmm(min/60)}${hh?`, com ${brN(hh,1)} homem-hora`:''}.`:''}</p>
+    ${lados.length>1?`<table class="relTab" style="border-collapse:collapse;margin-top:8px;font-size:9.5px"><thead><tr><th ${th}>Lado</th><th ${th}>Áreas</th><th ${th}>m²</th><th ${th}>Finalizadas</th><th ${th}>Em execução</th></tr></thead><tbody>${resumoLado}</tbody></table>`:''}
+    ${ciclo?`<div style="font-size:14px;font-weight:700;margin:14px 0 4px">Posição do ciclo de roçada</div><table class="relTab" style="border-collapse:collapse;font-size:9.5px"><thead><tr><th ${th}>Lado</th><th ${th}>Ciclo</th><th ${th}>Áreas executadas</th><th ${th}>Metragem executada</th><th ${th}>% do ciclo</th></tr></thead><tbody>${ciclo}</tbody></table>`:''}
+    <div style="font-size:14px;font-weight:700;margin:14px 0 4px">Atividades realizadas</div>
+    <table style="width:100%;border-collapse:collapse;font-size:9.5px" class="relTab"><thead><tr><th ${th}>Data</th><th ${th}>Turno</th><th ${th}>Lado</th><th ${th}>Área</th><th ${th}>Localização</th><th ${th}>m²</th><th ${th}>Horário</th><th ${th}>Status</th></tr></thead>
+      <tbody>${linhas}<tr style="background:#f3f5f4;font-weight:700"><td>Total</td><td></td><td></td><td></td><td></td><td style="text-align:right">${brN(m2(l))}</td><td>${min?hhmm(min/60):''}</td><td></td></tr></tbody></table>
+    <div class="html2pdf__page-break"></div>
+    <div style="border-top:3px solid ${verde};padding-top:10px;font-size:14px;font-weight:700;margin-bottom:8px">Registro fotográfico</div>
+    ${blocos}
+    <p style="font-size:9px;color:${mut};margin-top:10px">Gerado pelo SGC em ${new Date().toLocaleString('pt-BR')}.</p></div></div>`;
+}
+async function gerarPdfAtv(){
+  const l = atividadesRel(); if(!l.length){ alert('Nenhuma atividade no período escolhido.'); return; }
+  const F = filtroAtv(), nome = `Atividades_diarias_${F.de||'inicio'}_a_${F.ate||'hoje'}${F.turno?'_'+F.turno:''}${F.lado?'_'+F.lado.replace(' ','_'):''}.pdf`;
+  carregando(true);
+  const imgs = {}; let falhas = 0;
+  await Promise.all(l.map(async r=>{ imgs[r.id] = (await Promise.all((r.fotos||[]).map(async x=>{
+    try{ const { data, error } = await sb.storage.from(BUCKET_DOCS).download(x.path); if(error) throw error; return await recortarFoto(data); }catch(e){ falhas++; return null; } }))).filter(Boolean); }));
+  const caixa = document.createElement('div'); caixa.style.cssText = 'position:fixed;left:-10000px;top:0'; caixa.innerHTML = relatorioAtvHTML(l, imgs); document.body.appendChild(caixa);
+  try{
+    await carregarScript('https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js');
+    const op = { margin:[8,8,10,8], filename:nome, image:{type:'jpeg',quality:0.9}, html2canvas:{scale:2,backgroundColor:'#fff'}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}, pagebreak:{mode:['css','legacy'], avoid:['tr','.av']} };
+    await html2pdf().set(op).from(caixa.firstElementChild).save();
+    toast('PDF gerado: '+nome+(falhas?` (${falhas} foto(s) não puderam ser carregadas)`:''));
+  }catch(e){
+    console.error(e);
+    const w = window.open('', '_blank'); if(w){ w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${nome}</title><style>@page{size:A4;margin:10mm} .html2pdf__page-break{page-break-before:always} .av{page-break-inside:avoid}</style></head><body>${caixa.innerHTML}</body></html>`); w.document.close(); setTimeout(()=>w.print(), 700); }
+    else alert('Não foi possível gerar o PDF: '+(e.message||e));
+  }finally{ carregando(false); caixa.remove(); }
 }
 // Custos por equipamento: combustível (abastecimentos) + manutenções + outros custos lançados à parte
 function telaCustosEquip(){
