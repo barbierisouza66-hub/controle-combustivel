@@ -248,7 +248,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===================== VERSÃO ===================== */
-const VERSAO = '7.5';
+const VERSAO = '7.6';
 document.getElementById('versao').textContent = VERSAO;
 // Confere de tempos em tempos se foi publicada uma versão nova e avisa para recarregar.
 async function checarVersao(){
@@ -309,6 +309,10 @@ const TIPOS_REC = ['Medição mensal','Serviço extra','Aditivo / reajuste','Glo
 const STATUS_REC = ['A faturar','Faturada','Recebida'];
 const valRec = r => (r.tipo==='Glosa / desconto' ? -1 : 1) * Math.abs(+r.valor||0);
 const vencidaRec = r => valRec(r)>0 && r.status==='Faturada' && r.vencimento && r.vencimento < hoje();
+const MOTIVOS_IMP = ['Mau tempo / chuva','Falta de equipamento','Equipamento quebrado / em manutenção','Outro'];
+const PERIODOS_IMP = ['Dia inteiro','Meio período','Parcial (informar horas)'];
+const motivoEquip = o => /equipamento/i.test(o.motivo||'');
+const horasImp = r => r.periodo==='Parcial (informar horas)' ? (+r.horas||0) : r.periodo==='Meio período' ? jornada()/2 : jornada();
 const DESTINOS_POSTO = ['Estoque (galões das roçadeiras)','Direto no veículo'];
 const OPT_COMB = ['Gasolina','Mistura 2T','Diesel S10','Diesel S500','Etanol','Elétrico','Não se aplica'];
 const STATUS_LA = ['Não executada','Em andamento','Executada'];
@@ -482,6 +486,17 @@ const ENT = {
       col('BM',r=>r.bm),col('BM anexado',r=>celAnexoRec(r,'bmArq'),{html:1}),col('NF',r=>r.nf),col('NF anexada',r=>celAnexoRec(r,'nfArq'),{html:1}),col('Emissão',r=>dataBR(r.emissao)),col('Vencimento',r=>dataBR(r.vencimento)),
       col('Situação',r=>valRec(r)<0?tag('Desconto','n'):tag(r.status==='Faturada'&&vencidaRec(r)?'Vencida':r.status||'A faturar', r.status==='Recebida'?'':r.status==='Faturada'?(vencidaRec(r)?'d':'w'):'n'),{html:1}),col('Recebida em',r=>dataBR(r.recebimento))] },
 
+  improdutividade: { nome:'dia de improdutividade', data:'data', ordem:(a,b)=>String(b.data).localeCompare(String(a.data)), campos:[
+      {k:'data',l:'Data',t:'date',req:1},{k:'motivo',l:'Motivo da parada',t:'select',op:MOTIVOS_IMP},{k:'periodo',l:'Período parado',t:'select',op:PERIODOS_IMP},
+      {k:'horas',l:'Horas paradas',t:'number',step:'0.25',se:o=>o.periodo==='Parcial (informar horas)'},
+      {k:'equipId',l:'Equipamento',t:'ref',ent:'equipamentos',filtro:()=>true,se:o=>motivoEquip(o)},
+      {k:'lado',l:'Frente afetada',t:'select',op:['Lado AR','Lado Terra','Lado AR e Lado Terra']},{k:'qtdColab',l:'Colaboradores parados',t:'number',step:'1'},
+      {k:'obs',l:'Descrição (o que aconteceu)',t:'textarea'}],
+    validar:o=>o.periodo==='Parcial (informar horas)' && !(+o.horas>0) ? 'Informe quantas horas ficaram parados.' : '',
+    cols:[col('Data',r=>dataBR(r.data)),col('Dia',r=>r.data?['dom','seg','ter','qua','qui','sex','sáb'][new Date(r.data+'T12:00:00').getDay()]:''),col('Motivo',r=>tag(r.motivo||'', /chuva/i.test(r.motivo)?'n':motivoEquip(r)?'d':'w'),{html:1}),col('Período',r=>r.periodo),
+      col('Horas paradas',r=>hhmm(horasImp(r)),{n:1,tot:l=>hhmm(soma(l,horasImp))}),col('Frente',r=>r.lado),col('Equipamento',r=>r.equipId?nomeEquip(r.equipId):''),
+      col('Colab. parados',r=>r.qtdColab||'',{n:1}),col('Homem-hora perdido',r=>+r.qtdColab?num(horasImp(r)*r.qtdColab):'',{n:1,tot:l=>num(soma(l,r=>horasImp(r)*(+r.qtdColab||0)))})] },
+
   nylon: { nome:'consumo de nylon e faca', data:'data', campos:[
       {k:'data',l:'Data',t:'date',req:1},{k:'equipId',l:'Equipamento',t:'ref',ent:'equipamentos',filtro:ativoEquip,req:1},{k:'colabId',l:'Operador',t:'ref',ent:'colaboradores',filtro:ativoColab,req:1},
       {k:'nylon',l:'Nylon (quantidade)',t:'number',def:'0'},{k:'unNylon',l:'Unidade do nylon',t:'select',op:['metros','rolos','kg','unidades']},{k:'faca',l:'Faca (quantidade)',t:'number',step:'1',def:'0'},
@@ -554,12 +569,12 @@ function situacaoOc(r){
 const he50Oc = r => (+r.he50||0) + (r.tipo==='Hora extra 50%' ? (+r.horas||0) : 0);
 const he100Oc = r => (+r.he100||0) + (r.tipo==='Hora extra 100%' ? (+r.horas||0) : 0);
 const heOc = r => he50Oc(r) + he100Oc(r);
-const COLECOES_CONTRATO = ['colaboradores','equipamentos','custos','lli','ladoar','ladoterra','quadro','vagas','ocorrencias','abastecimentos','abastposto','receitas','nylon','ordens','manutencoes','fardos','frequencia'];
+const COLECOES_CONTRATO = ['colaboradores','equipamentos','custos','lli','ladoar','ladoterra','quadro','vagas','ocorrencias','abastecimentos','abastposto','receitas','improdutividade','nylon','ordens','manutencoes','fardos','frequencia'];
 
 /* ===================== MÓDULOS E ABAS ===================== */
 const MODULOS = [
   { id:'geral', nome:'Visão geral', abas:[ {nome:'Resumo do mês', painel:()=>painelGeral()} ] },
-  { id:'combustivel', nome:'Operação', abas:[ {nome:'Painel', painel:()=>painelCombustivel(), depois:()=>prepPainelComb()}, {nome:'Abastecimento de equipamento', painel:()=>cardSaldoComb()+telaEntidade('abastecimentos'), depois:()=>prepararForm('abastecimentos')}, {nome:'Abastecimento posto', painel:()=>cardSaldoComb(true)+telaEntidade('abastposto'), depois:()=>prepAbastPosto()}, {nome:'Consumo de nylon e faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'Lado AR', painel:()=>telaLadoAr('ladoar'), depois:()=>prepLadoAr('ladoar')}, {nome:'Lado Terra', painel:()=>telaLadoAr('ladoterra'), depois:()=>prepLadoAr('ladoterra')} ] },   // abas de RH retiradas do Combustível (o RH fica no módulo RH)
+  { id:'combustivel', nome:'Operação', abas:[ {nome:'Painel', painel:()=>painelCombustivel(), depois:()=>prepPainelComb()}, {nome:'Abastecimento de equipamento', painel:()=>cardSaldoComb()+telaEntidade('abastecimentos'), depois:()=>prepararForm('abastecimentos')}, {nome:'Abastecimento posto', painel:()=>cardSaldoComb(true)+telaEntidade('abastposto'), depois:()=>prepAbastPosto()}, {nome:'Consumo de nylon e faca', ent:'nylon'}, {nome:'Ordens de Serviço', ent:'ordens'}, {nome:'Improdutividade diária', painel:()=>painelImprod()+telaEntidade('improdutividade'), depois:()=>prepararForm('improdutividade')}, {nome:'Lado AR', painel:()=>telaLadoAr('ladoar'), depois:()=>prepLadoAr('ladoar')}, {nome:'Lado Terra', painel:()=>telaLadoAr('ladoterra'), depois:()=>prepLadoAr('ladoterra')} ] },   // abas de RH retiradas do Combustível (o RH fica no módulo RH)
   { id:'rh', nome:'RH', abas:[ {nome:'Painel', painel:()=>painelRH()}, {nome:'Ocorrências – calendário do mês', painel:()=>telaCalendarioRH(), depois:()=>prepCalendarioRH()}, {nome:'Quadro previsto e vagas', painel:()=>telaQuadroVagas(), depois:()=>{ prepararForm('quadro'); prepararForm('vagas'); }} ] },
   { id:'equipamentos', nome:'Controle de Equipamentos', abas:[ {nome:'Painel', painel:()=>painelEquip()}, {nome:'Manutenções', painel:()=>graficoDispEquip() + telaEntidade('manutencoes'), depois:()=>prepararForm('manutencoes')}, {nome:'Documentos – CRLV e opacidade', painel:()=>telaDocsEquip(), depois:()=>prepDocsEquip()}, {nome:'Custos por equipamento', painel:()=>telaCustosEquip(), depois:()=>prepararForm('custos')}, {nome:'LLI', painel:()=>telaLLI(), depois:()=>prepLLI()} ] },
   { id:'receita', nome:'Receita / Contrato', abas:[ {nome:'Painel', painel:()=>painelReceita(), depois:()=>prepReceita()}, {nome:'Faturamento e recebimentos', painel:()=>telaEntidade('receitas'), depois:()=>prepReceitas()}, {nome:'Documentos do contrato', painel:()=>telaDocsContrato(), depois:()=>prepDocsContrato()} ] },
@@ -1086,6 +1101,18 @@ function ajustarFormOS(f, mudou){
   if(a){ if(+a.metragem) m.value = a.metragem; m.readOnly = !!+a.metragem; m.classList.toggle('calc', m.readOnly); m.title = 'Metragem da área (automático)'; }
   else { if(mudou && m.dataset.auto) m.value = ''; m.readOnly = false; m.classList.remove('calc'); m.title = ''; }
   m.dataset.auto = a && +a.metragem ? '1' : '';
+}
+/* ===== Improdutividade diária: dias/horas parados por mau tempo ou falta de equipamento ===== */
+function painelImprod(){
+  const l = doMes(L('improdutividade'),'data'), periodo = est.mes ? mesBR(est.mes) : 'todos os meses';
+  const dias = new Set(l.map(r=>r.data)).size, porM = m => l.filter(r=>r.motivo===m);
+  const diasM = f => new Set(l.filter(f).map(r=>r.data)).size, hh = soma(l, r=>horasImp(r)*(+r.qtdColab||0));
+  const kp = `<div class="kpis">${kpi('Dias com parada', dias, periodo)}${kpi('Mau tempo / chuva', diasM(r=>r.motivo==='Mau tempo / chuva')+' dia(s)', hhmm(soma(porM('Mau tempo / chuva'),horasImp))+' parados')}
+    ${kpi('Falta / quebra de equipamento', diasM(motivoEquip)+' dia(s)', hhmm(soma(l.filter(motivoEquip),horasImp))+' parados')}${kpi('Horas paradas', hhmm(soma(l,horasImp)), 'jornada de '+hhmm(jornada())+' por dia inteiro')}${kpi('Homem-hora perdido', num(hh), l.length+' lançamento(s)')}</div>`;
+  const eq = agrupa(l.filter(r=>motivoEquip(r)&&r.equipId), r=>nomeEquip(r.equipId), horasImp);
+  return `<div class="card"><h2>Improdutividade – ${periodo}</h2>${kp}
+    <div class="grid2" style="margin-top:10px"><div><b>Horas paradas por motivo</b>${tabelaBarras(['Motivo','Horas'], agrupa(l, r=>r.motivo||'—', horasImp), v=>hhmm(v))}</div>
+    <div><b>Equipamentos que causaram parada</b>${tabelaBarras(['Equipamento','Horas'], eq, v=>hhmm(v))}</div></div></div>`;
 }
 function prepPainelComb(){
   $('#pcColab')?.addEventListener('change', e=>{ est.painelColab = e.target.value; renderTudo(); });
